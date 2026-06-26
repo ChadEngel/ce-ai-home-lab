@@ -1,0 +1,47 @@
+## NFS Subdir External Provisioner configuration
+## https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner
+
+nfs:
+  server: 192.168.30.121
+  path: /data/pod_data
+
+storageClass:
+  name: nfs-client
+  defaultClass: true
+  archiveOnDelete: false
+  archiveOnEmpty: false
+  reclaimPolicy: Retain
+  allowVolumeExpansion: true
+  mountOptions:
+    - soft
+    - nfsvers=4.1
+  parameters:
+    archiveOnDelete: "false"
+    archiveOnEmpty: "false"
+
+provisioner:
+  name: k8s-sigs.io/nfs-subdir-external-provisioner
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - nfs-client-provisioner
+            topologyKey: topology.kubernetes.io/zone
+          weight: 100
+
+persistence:
+  enabled: true
+  size: 1Gi
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

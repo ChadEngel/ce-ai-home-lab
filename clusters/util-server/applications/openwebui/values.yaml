@@ -1,0 +1,58 @@
+## Open WebUI configuration
+## https://ghcr.io/open-webui/open-webui
+
+image:
+  repository: ghcr.io/open-webui/open-webui
+  tag: main
+  pullPolicy: IfNotPresent
+
+pod:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+  hosts:
+    - host: ai.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          serviceName: openwebui
+          servicePort: 8080
+  tls:
+    - secretName: openwebui-tls
+      hosts:
+        - ai.example.com
+
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: nfs-client
+  mountPath: /app/backend/data
+  accessModes:
+    - ReadWriteOnce
+
+env:
+  - name: WEBUI_NAME
+    value: "Open WebUI"
+  - name: DEFAULT_MODELS
+    value: "ollama/local-host"
+  - name: OLLAMA_BASE_URL
+    value: "http://ollama-api.ai.svc.cluster.local:11434"
+
+# Add authentication here if needed
+# auth:
+#   enabled: false
+#   password: ""

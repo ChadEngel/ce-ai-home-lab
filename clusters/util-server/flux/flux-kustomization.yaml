@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - github.com/fluxcd/flux2/manifests/install?releasex=v2.32.0&wait=true
+
+configurations:
+  - ./patches
+  - ./patches/cluster-type-clusterrole.yaml
+  - ./patches/cluster-type-clusterrolebinding.yaml
+  - ./patches/cluster-type-install.yaml
+  - ./patches/cluster-type-leader-elect.yaml
+  - ./patches/cluster-type-manager-labels.yaml
+  - ./patches/cluster-type-priorityclass.yaml
+  - ./patches/cluster-type-resource-limits.yaml
