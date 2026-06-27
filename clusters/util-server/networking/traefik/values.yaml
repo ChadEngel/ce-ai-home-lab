@@ -12,10 +12,6 @@ ports:
     port: 80
   websecure:
     port: 443
-    exposedPort: 443
-    protocol: TCP
-    tls:
-      enabled: true
 
 providers:
   kubernetesIngress:
@@ -23,21 +19,6 @@ providers:
     publishedService:
       enabled: true
       path: "$(SERVICE_NAME)/svc/traefik"
-
-ingressRoute:
-  dashboard:
-    enabled: true
-    matchRules:
-      - EntryPoints: web
-    middlewares:
-      - name: traefik-admin-auth
-        namespace: traefik
-
-middleware:
-  traefik-admin-auth:
-    headers:
-      stsMaxAge: 315360000
-      stsIncludeSubdomains: true
 
 ingressClass:
   enabled: true
