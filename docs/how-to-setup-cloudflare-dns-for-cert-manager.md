@@ -113,7 +113,7 @@ Before applying, **edit the file** to update:
 
 1. **Email address** for Let's Encrypt notifications:
 ```yaml
-email: your-email@caehomelab.com
+email: chad@engelmn.com
 ```
 
 2. **Your domain name**:
@@ -185,7 +185,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: your-email@caehomelab.com
+    email: chad@engelmn.com
     privateKeySecretRef:
       name: letsencrypt-staging-account
     solvers:
