@@ -126,6 +126,17 @@ helm install cert-manager jetstack/cert-manager \
   -f clusters/util-server/networking/cert-manager/values.yaml
 ```
 
+**GoDaddy DNS Setup** (Required for TLS certificates):
+
+Before deploying applications with TLS, you need to configure a ClusterIssuer for Let's Encrypt:
+
+1. [GoDaddy DNS Configuration Guide](./docs/how-to-setup-godaddy-dns-for-cert-manager.md) - Complete setup instructions
+2. Create GoDaddy DNS credentials secret: [See docs](./docs/how-to-setup-godaddy-dns-for-cert-manager.md#step-2-create-kubernetes-secret)
+3. Apply ClusterIssuer: `kubectl apply -f clusters/util-server/networking/cert-manager/clusterissuer.yaml`
+
+**Internal DNS Requirements**:
+- UDM Pro DNS must point `*.example.com` to Traefik at `192.168.30.230` before cert issuance
+
 ### Step 3: Deploy Applications (in order)
 
 ```bash
