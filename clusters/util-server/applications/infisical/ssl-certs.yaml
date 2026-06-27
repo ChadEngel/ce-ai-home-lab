@@ -1,0 +1,28 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: infisical-ssl-certs
+  namespace: ai
+spec:
+  secretName: infisical-ssl-certs
+  duration: 2160h
+  renewBefore: 360h
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: "secrets.example.com"
+  dnsNames:
+    - secrets.example.com
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: infisical-ssl-certs
+  namespace: ai
+type: kubernetes.io/tls
+stringData:
+  tls.key: |
+    # Will be filled by cert-manager
+  tls.crt: |
+    # Will be filled by cert-manager
