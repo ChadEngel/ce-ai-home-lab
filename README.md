@@ -32,8 +32,14 @@ Services are accessible via Tailscale using the same internal URLs.
 
 ```
 .
+├── PREREQUISITES.md
 ├── README.md
-├── clusters/
+├── docs/
+│   ├── how-to-create-github-ssh-key.md
+│   ├── how-to-extend-linux-fs.md
+├── homelab_build.md
+├── scripts/
+└── clusters/
 │   └── util-server/
 │       ├── namespaces/
 │       │   └── ai.yaml
@@ -56,6 +62,10 @@ Services are accessible via Tailscale using the same internal URLs.
 ### Prerequisites
 
 For a complete infrastructure requirements overview and architecture diagram, see [`PREREQUISITES.md`](./PREREQUISITES.md)
+
+**System Administration Guides**:
+- [SSH Key Setup for GitHub](./docs/how-to-create-github-ssh-key.md) - Create SSH keys for Git authentication
+- [Extend Linux Filesystem](./docs/how-to-extend-linux-fs.md) - Add disk space to your Kubernetes node
 
 **Quick checklist**:
 - **k3s cluster** with 48GB+ disk space (k3s v1.35.5+k3s1)
@@ -503,7 +513,14 @@ For detailed test coverage, see the [test script documentation](./scripts/deploy
 
 ## Documentation
 
-For detailed build notes and lessons learned, see [`homelab_build.md`](./homelab_build.md).
+- **Deployment Guide**: [`README.md`](./README.md) - Comprehensive setup instructions
+- **Infrastructure Requirements**: [`PREREQUISITES.md`](./PREREQUISITES.md) - Hardware, network, and storage requirements
+- **Build Notes**: [`homelab_build.md`](./homelab_build.md) - Detailed build process and lessons learned
+- **FluxCD Setup**: [`clusters/util-server/flux/README.md`](./clusters/util-server/flux/README.md) - GitOps configuration
+- **System Administration**:
+  - [GitHub SSH Key Setup](./docs/how-to-create-github-ssh-key.md) - Authentication and security
+  - [Linux Storage Extension](./docs/how-to-extend-linux-fs.md) - Disk management for your node
+- **Testing**: [`scripts/deployment-test.sh`](./scripts/deployment-test.sh) - Automated validation
 
 ## License
 
