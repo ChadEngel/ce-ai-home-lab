@@ -4,5 +4,4 @@
 installCRDs: false
 
 extraArgs:
-  - --enable-cni
   - --leader-elect
