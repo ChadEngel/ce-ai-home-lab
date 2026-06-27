@@ -36,20 +36,20 @@ data:
     # LiteLLM Configuration
     # Provider-specific settings
     
-    # Ollama settings (local LLM)
+    # Ollama settings (external server)
     ollama_model_list:
       - model_name: llama3
         litellm_params:
           model: ollama/chat/llama3
-          api_base: http://ollama-api.ai.svc.cluster.local:11434
+          api_base: http://aiserver.home:11434
       - model_name: mistral
         litellm_params:
           model: ollama/chat/mistral
-          api_base: http://ollama-api.ai.svc.cluster.local:11434
+          api_base: http://aiserver.home:11434
       - model_name: mixtral
         litellm_params:
           model: ollama/chat/mixtral
-          api_base: http://ollama-api.ai.svc.cluster.local:11434
+          api_base: http://aiserver.home:11434
 
     # OpenRouter settings (API access)
     openrouter_model_list:

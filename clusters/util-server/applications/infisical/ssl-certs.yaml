@@ -14,15 +14,3 @@ spec:
   dnsNames:
     - secrets.caehomelab.com
 
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: infisical-ssl-certs
-  namespace: ai
-type: kubernetes.io/tls
-stringData:
-  tls.key: |
-    # Will be filled by cert-manager
-  tls.crt: |
-    # Will be filled by cert-manager

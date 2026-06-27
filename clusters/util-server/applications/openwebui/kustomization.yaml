@@ -5,6 +5,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: openwebui
+  namespace: ai
 spec:
   selector:
     app: openwebui
@@ -85,7 +86,7 @@ spec:
             - name: DEFAULT_MODELS
               value: "ollama/local-host"
             - name: OLLAMA_BASE_URL
-              value: "http://ollama-api.ai.svc.cluster.local:11434"
+              value: "http://aiserver.home:11434"
           resources:
             requests:
               cpu: 100m
