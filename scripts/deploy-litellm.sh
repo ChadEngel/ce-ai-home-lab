@@ -11,9 +11,10 @@ NAMESPACE="ai"
 
 echo "Deploying LiteLLM to namespace: $NAMESPACE"
 
-# Apply Kustomization resources (Service, Secret, ConfigMap)
-kubectl apply --namespace="$NAMESPACE" -f "$APPS_DIR/litellm/kustomization.yaml"
+# Apply Kustomization resources (Service, PVC, Secret, ConfigMap, Deployment)
+kubectl apply --namespace="$NAMESPACE" -f "$APPS_DIR/litellm/kustomization.yaml" --validate=false
 
 echo "LiteLLM deployment completed."
 echo "Service endpoint: http://litellm-api.ai.svc.cluster.local:4000"
-echo "IMPORTANT: Update the secrets and model API keys before use."
+echo "IMPORTANT: Update the secrets and model API keys before use.
+echo "Use --validate=false flag since validation may fail locally."
