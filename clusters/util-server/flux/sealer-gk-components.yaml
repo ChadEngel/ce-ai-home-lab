@@ -1,0 +1,46 @@
+# GitHub credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gitops-auth
+  namespace: flux-system
+type: Opaque
+stringData:
+  username: ChadEngel
+  password: $GH_TOKEN
+
+---
+# GitRepository
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 1m
+  ref:
+    branch: main
+  url: https://github.com/ChadEngel/ce-ai-home-lab.git
+  secretRef:
+    name: gitops-auth
+
+---
+# Application for apps
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-apps
+  namespace: flux-system
+spec:
+  interval: 5m
+  path: ./clusters/util-server
+  prune: true
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  decryptionProvider: ""
+  postBuild:
+    substitute: {}
+  dependsOn:
+    - name: infrastructure

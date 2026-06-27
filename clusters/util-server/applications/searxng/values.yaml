@@ -1,0 +1,61 @@
+## SearXNG configuration
+## https://github.com/searxng/searxng
+
+image:
+  repository: searxng/searxng
+  tag: latest
+  pullPolicy: IfNotPresent
+
+pod:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+service:
+  type: ClusterIP
+  port: 8080
+
+env:
+  - name: SEARXNG_SETTINGS
+    value: |
+      server:
+        secret_key: "CHANGE_ME_SECRET_KEY"
+        limiter: true
+        image_proxy: true
+        default_http_headers:
+          X-Content-Type-Options: nosniff
+          X-XSS-Protection: "1; mode=block"
+          Referrer-Policy: no-referrer
+      ui:
+        default_locale: "en-US"
+      search:
+        formats:
+          - html
+          - json
+
+ingress:
+  enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 0
+  hosts:
+    - host: search.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: searxng-tls
+      hosts:
+        - search.example.com
+
+storage:
+  enabled: true
+  size: 2Gi
+  storageClass: nfs-client
+  accessModes:
+    - ReadWriteOnce
+  mountPath: /searxng/sessions

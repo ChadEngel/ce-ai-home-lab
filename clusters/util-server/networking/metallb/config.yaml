@@ -1,0 +1,17 @@
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: advertise
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - default-ipv4-usage
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default-ipv4-usage
+  namespace: metallb-system
+spec:
+  addresses:
+    - 192.168.30.230-192.168.30.240
