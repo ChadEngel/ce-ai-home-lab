@@ -8,8 +8,8 @@
 # 3. openwebui - Main AI interface (connects to external ollama on aiserver.home)
 # 4. infisical - Secrets management
 # 5. searxng - Search engine
-# 6. mcpo - MCP server
 #
+# Note: MCPo is not deployed (no published Docker images yet)
 # Note: Ollama runs on separate server aiserver.home, not in Kubernetes
 
 set -e
@@ -46,11 +46,6 @@ $SCRIPT_DIR/deploy-infisical.sh
 echo ""
 echo ">>> Step 5: Deploying SearXNG..."
 $SCRIPT_DIR/deploy-searxng.sh
-
-# Step 6: Deploy MCPo
-echo ""
-echo ">>> Step 6: Deploying MCPo..."
-$SCRIPT_DIR/deploy-mcpo.sh
 
 echo ""
 echo "=============================================="

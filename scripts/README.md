@@ -90,7 +90,8 @@ For the best results, deploy Kubernetes applications in this order:
 3. **openwebui** - Main AI interface (requires LiteLLM running)
 4. **infisical** - Secrets management
 5. **searxng** - Search engine (standalone, no dependencies)
-6. **mcpo** - MCP server (standalone)
+
+**Note**: MCPo not deployed (no published Docker images available yet)
 
 Note: All Kubernetes applications connect to external Ollama server at `aiserver.home:11434`.
 
