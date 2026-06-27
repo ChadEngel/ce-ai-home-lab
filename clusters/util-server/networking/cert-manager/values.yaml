@@ -1,40 +1,30 @@
 ## cert-manager HelmChart configuration
 ## https://github.com/cert-manager/cert-manager
 
-## DNS-01 challenge configuration for Let's Encrypt
-## Using internal DNS server for validation
+# Enable deployment of cert-manager CRDs
+# (Note: For v1.14+, CRDs are installed separately or use helm values below)
 
-acme:
-  server: https://acme-v02.api.letsencrypt.org/directory
-  email: admin@example.com
-  # DNS-01 challenge configured via DNS provider
-  dns01:
-    enabled: true
-
-installCRDs: true
+installCRDs: false
 
 extraArgs:
   - --enable-cni
   - --leader-elect
 
 replicas: 2
+
+service:
+  type: ClusterIP
+
 dnsChallenge:
   provider: route53
-  regional: false
 
 rbac:
   create: true
 
 serviceMonitor:
-  enabled: true
-  namespaces:
-    - cert-manager
-  namespace: ""
-  selector: {}
-  endpoints: []
-  path: /metrics
+  enabled: false
 
 podDnsPolicy: "ClusterFirst"
 podDnsConfig:
   nameservers:
-    - "192.168.30.121"  # UDM Pro DNS
+    - "192.168.30.121"
