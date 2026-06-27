@@ -123,9 +123,7 @@ helm repo update
 helm install cert-manager jetstack/cert-manager \
   --namespace cert-manager \
   --create-namespace \
-  -f clusters/util-server/networking/cert-manager/values.yaml \
-  --set crds.enabled=true \
-  --set installCRDs=true
+  -f clusters/util-server/networking/cert-manager/values.yaml
 ```
 
 ### Step 3: Deploy Applications (in order)
@@ -207,7 +205,6 @@ helm install traefik traefik/traefik \
 # cert-manager
 helm install cert-manager jetstack/cert-manager \
   --namespace cert-manager \
-  --set installCRDs=true \
   -f clusters/util-server/networking/cert-manager/values.yaml
 
 # Wait for cert-manager to create ClusterIssuer
