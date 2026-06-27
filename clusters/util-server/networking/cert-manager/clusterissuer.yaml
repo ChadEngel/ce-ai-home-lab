@@ -11,19 +11,18 @@ spec:
     solvers:
       - dns01:
           dns01:
-            provider: godaddy
+            provider: cloudflare
           zones:
             - caehomelab.com
 
 ---
-# Create GoDaddy DNS credentials secret
-# Replace with your actual GoDaddy API credentials
+# Create Cloudflare DNS credentials secret
+# Get API Token from https://dash.cloudflare.com/settings/api-tokens
 apiVersion: v1
 kind: Secret
 metadata:
-  name: godaddy-dns-creds
+  name: cloudflare-dns-creds
   namespace: cert-manager
 type: Opaque
 stringData:
-  GO_DADDY_API_KEY: "your-api-key-here"
-  GO_DADDY_API_SECRET: "your-api-secret-here"
+  CF_API_TOKEN: "your-cloudflare-api-token-here"
