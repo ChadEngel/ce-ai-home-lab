@@ -16,5 +16,5 @@ kubectl apply --namespace="$NAMESPACE" -f "$APPS_DIR/litellm/kustomization.yaml"
 
 echo "LiteLLM deployment completed."
 echo "Service endpoint: http://litellm-api.ai.svc.cluster.local:4000"
-echo "IMPORTANT: Update the secrets and model API keys before use.
+echo "IMPORTANT: Update the secrets and model API keys before use."
 echo "Use --validate=false flag since validation may fail locally."
