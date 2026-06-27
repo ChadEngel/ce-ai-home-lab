@@ -10,6 +10,20 @@ spec:
       name: letsencrypt-prod-account
     solvers:
       - dns01:
-          route53:
-            region: us-east-1
-            hostedZoneName: example.com
+          dns01:
+            provider: godaddy
+          zones:
+            - example.com
+
+---
+# Create GoDaddy DNS credentials secret
+# Replace with your actual GoDaddy API credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: godaddy-dns-creds
+  namespace: cert-manager
+type: Opaque
+stringData:
+  GO_DADDY_API_KEY: "your-api-key-here"
+  GO_DADDY_API_SECRET: "your-api-secret-here"
