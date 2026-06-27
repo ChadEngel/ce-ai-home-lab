@@ -11,11 +11,17 @@ spec:
     solvers:
       - dns01:
           cloudflare:
-            email: chad@engelmn.com
+            apiTokenSecretRef:
+              name: cloudflare-dns-creds
+              key: CF_API_TOKEN
 
 ---
-# Cloudflare DNS credentials
+# Cloudflare DNS credentials for cert-manager
 # Get API token from: https://dash.cloudflare.com/settings/api-tokens
+# Create this secret:
+# kubectl create secret generic cloudflare-dns-creds \
+#   --from-literal=CF_API_TOKEN="your-token" \
+#   -n cert-manager
 apiVersion: v1
 kind: Secret
 metadata:
