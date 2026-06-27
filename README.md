@@ -55,6 +55,9 @@ Services are accessible via Tailscale using the same internal URLs.
 
 ### Prerequisites
 
+For a complete infrastructure requirements overview and architecture diagram, see [`PREREQUISITES.md`](./PREREQUISITES.md)
+
+**Quick checklist**:
 - **k3s cluster** with 48GB+ disk space (k3s v1.35.5+k3s1)
 - **NFS storage server** (192.168.30.121:/data/pod_data)
 - **Internal DNS** configured on UDM Pro
@@ -475,6 +478,28 @@ MIT
               │  Ollama (ClusterIP)   │
               └───────────────────────┘
 ```
+
+## Testing & Validation
+
+After deployment, verify all components are running correctly:
+
+```bash
+# Run the deployment test script
+./scripts/deployment-test.sh
+
+# Test specific namespace
+./scripts/deployment-test.sh my-namespace
+
+# Expected results:
+# - All pod statuses should show Running
+# - All services should be available
+# - Ingress configurations should be applied
+# - Certificates should be issued
+# - Storage should be bound
+# - Network connectivity should work
+```
+
+For detailed test coverage, see the [test script documentation](./scripts/deployment-test.sh).
 
 ## Documentation
 
