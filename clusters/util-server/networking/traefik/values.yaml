@@ -22,9 +22,7 @@ providers:
     enabled: true
     publishedService:
       enabled: true
-      publishedService:
-        path:
-          - "$(SERVICE_NAME)\svc/proxy"
+      path: "$(SERVICE_NAME)/svc/traefik"
 
 ingressRoute:
   dashboard:
