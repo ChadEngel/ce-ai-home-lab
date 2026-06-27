@@ -55,39 +55,379 @@ Services are accessible via Tailscale using the same internal URLs.
 
 ### Prerequisites
 
-- k3s cluster with 48GB+ disk space
-- NFS storage server (192.168.30.121:/data/pod_data)
-- Access to internal DNS (UDM Pro)
-- Tailscale for remote access
+- **k3s cluster** with 48GB+ disk space (k3s v1.35.5+k3s1)
+- **NFS storage server** (192.168.30.121:/data/pod_data)
+- **Internal DNS** configured on UDM Pro
+- **Tailscale** configured for remote access
+- **GitHub** repository with write access (for GitOps push)
+- **Kubectl** configured for the k3s cluster
+- **Helm v3** (optional, for chart deployments)
 
-### Install FluxCD
+---
+
+## Quick Start - All-in-One Deployment
+
+### Step 1: Clone Repository
 
 ```bash
 git clone https://github.com/ChadEngel/ce-ai-home-lab.git
 cd ce-ai-home-lab
+```
+
+### Step 2: Apply Basic Infrastructure
+
+**Create AI namespace:**
+```bash
+kubectl apply -f clusters/util-server/namespaces/ai.yaml
+```
+
+**Deploy NFS Storage Class:**
+```bash
+helm repo add nfs-client https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner
+helm repo update
+helm install nfs-storage nfs-client/nfs-subdir-external-provisioner \
+  --namespace ai \
+  --create-namespace \
+  -f clusters/util-server/storage/nfs/nfs-subdir-external-provisioner-values.yaml
+```
+
+**Deploy Traefik:**
+```bash
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+helm install traefik traefik/traefik \
+  --namespace kube-system \
+  -f clusters/util-server/networking/traefik/values.yaml
+```
+
+**Deploy cert-manager:**
+```bash
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  -f clusters/util-server/networking/cert-manager/values.yaml \
+  --set crds.enabled=true \
+  --set installCRDs=true
+```
+
+### Step 3: Deploy Applications (in order)
+
+```bash
+# 1. Deploy SearXNG
+kubectl apply -f clusters/util-server/applications/searxng/
+
+# 2. Deploy MCPO
+kubectl apply -f clusters/util-server/applications/mcpo/
+
+# 3. Deploy Ollama
+kubectl apply -f clusters/util-server/applications/ollama/
+
+# 4. Deploy LiteLLM (before OpenWebUI!)
+kubectl apply -f clusters/util-server/applications/litellm/
+
+# 5. Deploy Open WebUI
+kubectl apply -f clusters/util-server/applications/openwebui/
+```
+
+### Step 4: Wait for Pods
+
+```bash
+# Check all pods are running
+kubectl get pods -n ai
+
+# Check services
+kubectl get svc -n ai
+
+# Check ingress
+kubectl get ingress -n ai
+```
+
+### Step 5: Verify Deployment
+
+```bash
+# All applications should be running
+kubectl get pods -n ai | grep Running
+
+# Check storage classes
+kubectl get storageclass
+
+# Verify Ingress created successfully
+kubectl describe ingress -n ai
+```
+
+---
+
+## Detailed Deployment Instructions
+
+### Option A: Manual Deployment (Recommended for first time)
+
+1. **Create namespace:**
+```bash
+kubectl apply -f clusters/util-server/namespaces/ai.yaml
+```
+
+2. **Deploy Storage:**
+```bash
+# NFS StorageClass
+helm install \
+  nfs-storage \
+  oci://registry.nfs-client.io/nfs-subdir-external-provisioner \
+  --namespace ai \
+  --set nfs.server=192.168.30.121 \
+  --set nfs.path=/data/pod_data \
+  --set storageClass.name=nfs-client \
+  --set storageClass.defaultClass=true
+```
+
+3. **Deploy Networking:**
+```bash
+# Traefik Ingress Controller
+helm install traefik traefik/traefik \
+  --namespace kube-system \
+  -f clusters/util-server/networking/traefik/values.yaml
+
+# cert-manager
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --set installCRDs=true \
+  -f clusters/util-server/networking/cert-manager/values.yaml
+
+# Wait for cert-manager to create ClusterIssuer
+kubectl apply -f clusters/util-server/networking/cert-manager/clusterissuer.yaml
+```
+
+4. **Deploy Applications:**
+```bash
+# Order matters: LiteLLM before OpenWebUI
+# SearXNG - Search engine
+kubectl apply -f clusters/util-server/applications/searxng/
+
+# MCPO - MCP Server (no ingress)
+kubectl apply -f clusters/util-server/applications/mcpo/
+
+# Ollama - Local LLM runtime
+kubectl apply -f clusters/util-server/applications/ollama/
+
+# LiteLLM - Unified LLM proxy
+kubectl apply -f clusters/util-server/applications/litellm/
+
+# IMPORTANT: Update LiteLLM with your API keys before deploying OpenWebUI
+# Edit the secrets in: clusters/util-server/applications/litellm/kustomization.yaml
+# Then apply:
+kubectl apply -f clusters/util-server/applications/openwebui/
+```
+
+### Option B: GitOps with FluxCD
+
+See [`clusters/util-server/flux/README.md`](./clusters/util-server/flux/README.md) for detailed instructions.
+
+1. **Install FluxCD:**
+```bash
+# Install FluxCD to the cluster
 flux install \
-    --namespace=flux-system \
-    --components=source-controller
+  --namespace=flux-system \
+  --components=source-controller
 ```
 
-### Apply Configuration
-
+2. **Configure Git Repository:**
 ```bash
-kubectl apply -f clusters/util-server/namespaces/
-kubectl apply -f clusters/util-server/storage/
-kubectl apply -f clusters/util-server/networking/
-kubectl apply -f clusters/util-server/applications/
-```
-
-### GitOps Setup
-
-```bash
+# Create secret for GitHub authentication
 cd clusters/util-server/flux
-flux create ks infrastructure \
-    --namespace=ai \
-    --path=./clusters/util-server \
-    --source=GitRepository/ce-ai-home-lab
+./flux-install.sh
 ```
+
+3. **Apply Infrastructure First:**
+```bash
+flux create ks infrastructure \
+  --namespace=ai \
+  --path=./clusters/util-server \
+  --source=GitRepository/ce-ai-home-lab \
+  --interval=5m \
+  --prune=true
+```
+
+4. **Monitor Deployment:**
+```bash
+flux get reconciliations
+flux get kustomizations
+kubectl get events -n ai
+```
+
+---
+
+## Configuration Files
+
+### Update LiteLLM API Keys
+
+Edit `clusters/util-server/applications/litellm/kustomization.yaml` and update:
+
+```yaml
+stringData:
+  LITELLM_SECRET_KEY: "sk-litellm-secret-key-your-secure-key"
+  LITELLM_MASTER_KEY: "sk-litellm-master-key-your-secure-key"
+  OSK_OPENROUTER_API_KEY: "osk-your-openrouter-api-key"
+```
+
+### Update OpenWebUI to Use LiteLLM
+
+After LiteLLM is deployed, update OpenWebUI's environment variable:
+```yaml
+env:
+  - name: OLLAMA_BASE_URL
+    value: "http://litellm-api.ai.svc.cluster.local:4000/v1"
+```
+
+---
+
+## Application URLs
+
+| Application | Public URL | Internal URL | Notes |
+|-------------|------------|--------------|-------|
+| **Open WebUI** | https://ai.example.com | http://openwebui:8080 | Main LLM UI |
+| **LiteLLM** | https://llm.example.com | http://litellm-api:4000 | Unified LLM proxy |
+| **SearXNG** | https://search.example.com | http://searxng-api:8080 | Search engine |
+| **MCPO** | ClusterIP only | http://mcpo:8000 | MCP Server (no ingress) |
+| **Ollama** | ClusterIP only | http://ollama-api:11434 | Local LLM (no ingress) |
+
+---
+
+## Monitoring & Troubleshooting
+
+### Check Pod Status
+```bash
+kubectl get pods -n ai
+```
+
+### View Pod Logs
+```bash
+kubectl logs -f <pod-name> -n ai
+```
+
+### Check Storage Class
+```bash
+kubectl get storageclass
+kubectl get pvc -n ai
+```
+
+### View Ingress Status
+```bash
+kubectl get ingress -n ai
+kubectl describe ingress -n ai
+```
+
+### Check Certificate Status
+```bash
+kubectl get certificate -n ai
+kubectl describe certificate <certificate-name> -n ai
+```
+
+### FluxCD Health (if using GitOps)
+```bash
+flux get components
+flux get sources git -n flux-system
+flux get kustomizations -n ai
+flux get reconciliations -n ai
+```
+
+---
+
+## Applications
+
+| Application | Namespace | Type | Port | Description |
+|-------------|-----------|------|------|-------------|
+| **Open WebUI** | ai | Ingress | 443 | LLM Interface WebUI with MCP support |
+| **LiteLLM** | ai | Ingress | 4000 | Unified LLM proxy (Ollama + OpenRouter) |
+| **MCPO** | ai | ClusterIP | 8000 | Model Context Protocol Server |
+| **Ollama** | ai | ClusterIP | 11434 | Local LLM runtime |
+| **SearXNG** | ai | Ingress | 443 | Search engine |
+
+---
+
+## Architecture
+
+```
+                    ┌─────┐
+                    │Internet───│
+                    └─┬───┘
+                       │
+                  ┌───────┐
+                  │DNS-01 │ (Let's Encrypt validation)
+                  └──┬────
+                       │
+            ┌──────────┴──────────┐
+            │ cert-manager        │
+            │ + UDM Pro DNS       │
+            └────┬────────────┬───┘
+                 │           │
+                 ▼           ▼
+            ┌─────────┐  ┌──────────┐
+            │DNS:ai.  │  │DNS:search│
+            │         │  │          │
+            └────┬────┘  └────┬─────┘
+                 │           │
+                 ▼           ▼
+            ┌────────────────────────┐
+            │  UDM Pro (all resolve)│
+            │  to 192.168.30.230     │
+            └────┬───────────────────┘
+                 │
+                 ▼
+            ┌──────────┐
+            │ Traefik  │
+            │ Ingress  │
+            │ (192.168.│
+            │ 30.230)   │
+            └────┬─────┘
+                 │
+   ┌─────────────┼─────────────┐
+   │             │             │
+   ▼             ▼             ▼
+┌────────┐  ┌──────────┐  ┌───────┐
+│Open    │  │ SearXNG  │  │ LiteLL│
+│ WebUI  │  │          │  │  M    │
+│        │  │          │  │       │
+└───┬────┘  └────┬─────┘  └───┬───┘
+    │           │            │
+    ▼           ▼            ▼
+┌────┐      ┌────────────┐  │
+│MCPO│      │ Ollama     │  │
+│(CIP)│     │ (CIP)      │  │
+└────┘      └────────────┘  │
+                           │
+                    ┌──────┴──────┐
+                    │OpenRouter   │
+                    │(API access) │
+                    └─────────────┘
+```
+
+---
+
+## Documentation & Resources
+
+- **Build Notes:** [`homelab_build.md`](./homelab_build.md)
+- **FluxCD Instructions:** [`clusters/util-server/flux/README.md`](./clusters/util-server/flux/README.md)
+- **Kubernetes k3s:** https://k3s.io
+- **Traefik Ingress:** https://traefik.io
+- **cert-manager:** https://cert-manager.io
+- **LiteLLM:** https://github.com/BerriAI/litellm
+
+---
+
+## Support
+
+For issues, check:
+1. Pod logs: `kubectl logs <pod-name> -n ai`
+2. Events: `kubectl get events -n ai`
+3. Ingress status: `kubectl describe ingress -n ai`
+4. Storage: `kubectl get pvc -n ai`
+
+---
+
+## License
+
+MIT
 
 ## Applications
 
