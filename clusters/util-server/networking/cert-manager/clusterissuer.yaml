@@ -10,14 +10,12 @@ spec:
       name: letsencrypt-prod-account
     solvers:
       - dns01:
-          dns01:
-            provider: cloudflare
-          zones:
-            - caehomelab.com
+          provider: cloudflare
 
 ---
-# Create Cloudflare DNS credentials secret
-# Get API Token from https://dash.cloudflare.com/settings/api-tokens
+# Cloudflare DNS credentials for cert-manager
+# Get API token from: https://dash.cloudflare.com/settings/api-tokens
+# Use template "Edit zone DNS" for least-privilege access
 apiVersion: v1
 kind: Secret
 metadata:
