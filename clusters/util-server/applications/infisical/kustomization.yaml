@@ -1,0 +1,216 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: infisical-secrets
+  namespace: ai
+type: Opaque
+stringData:
+  JWT_SECRET: "infisical-jwt-secret-key-change-me"
+  NEXT_SECRET_KEY_BASE: "infisical-secret-key-base-change-me"
+  NEXT_PUBLIC_INFISICAL_SERVICE_ENV: "kubernetes"
+  NEXT_PUBLIC_INFISICAL_ENVIRONMENT_ID: "1"
+  NEXT_PUBLIC_INFISICAL_LOGO_URL: "https://infisical.com/static/infisical-logo.svg"
+  NEXT_PUBLIC_INFISICAL_ONBOARDING_PROJECT_ID: "1"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infisical-deployment-info
+  namespace: ai
+data:
+  DATABASE_URL: "postgresql://postgres:infisical-password@infisical-db:5432/infisical"
+  JWT_SECRET: "infisical-jwt-secret-key-change-me"
+  NEXT_SECRET_KEY_BASE: "infisical-secret-key-base-change-me"
+  NEXT_PUBLIC_INFISICAL_SERVICE_ENV: "kubernetes"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: infisical
+  namespace: ai
+  labels:
+    app: infisical
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: infisical
+  template:
+    metadata:
+      labels:
+        app: infisical
+    spec:
+      containers:
+        - name: infisical
+          image: infisical/infisical-platform:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: infisical-deployment-info
+            - configMapRef:
+                name: infisical-db-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          volumeMounts:
+            - name: infisical-data
+              mountPath: /var/fuse
+            - name: infisical-certs
+              mountPath: /app/ssl
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: infisical-data
+          persistentVolumeClaim:
+            claimName: infisical-data
+        - name: infisical-certs
+          secret:
+            secretName: infisical-ssl-certs
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: infisical
+  namespace: ai
+spec:
+  type: ClusterIP
+  selector:
+    app: infisical
+  ports:
+    - port: 3000
+      targetPort: 3000
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: infisical-ingress
+  namespace: ai
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+spec:
+  ingressClassName: traefik-v2
+  tls:
+    - hosts:
+        - secrets.example.com
+      secretName: infisical-ssl-certs
+  rules:
+    - host: secrets.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: infisical
+                port:
+                  number: 3000
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: infisical-data
+  namespace: ai
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: infisical-db
+  namespace: ai
+spec:
+  type: ClusterIP
+  selector:
+    app: infisical-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: infisical-db
+  namespace: ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: infisical-db
+  template:
+    metadata:
+      labels:
+        app: infisical-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_DB
+              value: "infisical"
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: infisical-db-creds
+                  key: POSTGRES_PASSWORD
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          ports:
+            - containerPort: 5432
+              name: postgres
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 10
+            periodSeconds: 5

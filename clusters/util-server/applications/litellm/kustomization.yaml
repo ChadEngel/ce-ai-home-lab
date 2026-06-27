@@ -1,0 +1,88 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm-api
+  namespace: ai
+spec:
+  type: ClusterIP
+  selector:
+    app: litellm
+  ports:
+    - port: 4000
+      targetPort: 4000
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: litellm-secrets
+  namespace: ai
+type: Opaque
+stringData:
+  LITELLM_SECRET_KEY: "sk-litellm-secret-key-change-me"
+  LITELLM_MASTER_KEY: "sk-litellm-master-key-change-me"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config
+  namespace: ai
+data:
+  litellm_settings.yaml: |
+    # LiteLLM Configuration
+    # Provider-specific settings
+    
+    # Ollama settings (local LLM)
+    ollama_model_list:
+      - model_name: llama3
+        litellm_params:
+          model: ollama/chat/llama3
+          api_base: http://ollama-api.ai.svc.cluster.local:11434
+      - model_name: mistral
+        litellm_params:
+          model: ollama/chat/mistral
+          api_base: http://ollama-api.ai.svc.cluster.local:11434
+      - model_name: mixtral
+        litellm_params:
+          model: ollama/chat/mixtral
+          api_base: http://ollama-api.ai.svc.cluster.local:11434
+
+    # OpenRouter settings (API access)
+    openrouter_model_list:
+      - model_name: gpt-4o
+        litellm_params:
+          model: openrouter/chat/gpt-4o
+          api_key: osk-YOUR_OPENROUTER_KEY
+      - model_name: llama-3-openai
+        litellm_params:
+          model: openrouter/meta-llama/llama-3-70b-instruct
+          api_key: osk-YOUR_OPENROUTER_KEY
+      - model_name: claude-3.5
+        litellm_params:
+          model: openrouter/anthropic/claude-3.5-sonnet
+          api_key: osk-YOUR_OPENROUTER_KEY
+
+    # Default fallback
+    litellm_settings:
+      - model_name: *
+        litellm_params:
+          api_key: osk-DEFAULT
+          timeout: 120
+
+      # Model price configuration
+      - model_name: *
+        litellm_params:
+          litellm_model_name: ollama-models
+
+      # Rate limiting
+      - model_name: *
+        litellm_params:
+          rate_limit:
+            - token_limit: 100000
+              window: 24h
+              duration: 86400
+              budget: 1.0

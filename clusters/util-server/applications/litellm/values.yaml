@@ -1,0 +1,89 @@
+## LiteLLM (proxy) configuration
+## https://github.com/BerriAI/litellm
+## 
+## Unified API for multiple LLM providers:
+## - Ollama (local models)
+## - OpenRouter (paid API access)
+## - OpenAI
+## - Anthropic
+## - And many others
+
+image:
+  repository: ghcr.io/berriai/litellm
+  tag: stable
+  pullPolicy: IfNotPresent
+
+pod:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+service:
+  type: ClusterIP
+  port: 4000
+
+env:
+  # LiteLLM configuration
+  - name: DATABASE_URL
+    value: "sqlite:///data/litellm.db"
+  - name: PORT
+    value: "4000"
+  - name: PROXY_HOST_IP
+    value: "0.0.0.0"
+  
+  # Security
+  - name: LITELLM_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: litellm-secrets
+        key: LITELLM_SECRET_KEY
+  - name: LITELLM_MASTER_KEY
+    valueFrom:
+      secretKeyRef:
+        name: litellm-secrets
+        key: LITELLM_MASTER_KEY
+  
+  # Default model fallback (use local Ollama first)
+  - name: DEFAULT_MODELS
+    value: "ollama-models"
+  
+  # Logging
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: SENTRY_URL
+    value: ""
+
+ingress:
+  enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+  hosts:
+    - host: llm.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: litellm-tls
+      hosts:
+        - llm.example.com
+
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: nfs-client
+  accessModes:
+    - ReadWriteOnce
+  mountPath: /app/data
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
