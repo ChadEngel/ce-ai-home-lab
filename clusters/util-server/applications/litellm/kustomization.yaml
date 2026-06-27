@@ -86,3 +86,92 @@ data:
               window: 24h
               duration: 86400
               budget: 1.0
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: litellm-pvc
+  namespace: ai
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+  namespace: ai
+  labels:
+    app: litellm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm
+  template:
+    metadata:
+      labels:
+        app: litellm
+    spec:
+      containers:
+        - name: litellm
+          image: ghcr.io/berriai/litellm:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: litellm-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/litellm_settings.yaml
+              subPath: litellm_settings.yaml
+            - name: litellm-data
+              mountPath: /app/data
+      volumes:
+        - name: config
+          configMap:
+            name: litellm-config
+        - name: litellm-data
+          persistentVolumeClaim:
+            claimName: litellm-pvc
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: litellm-ingress
+  namespace: ai
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik-v2
+  tls:
+    - hosts:
+        - llm.caehomelab.com
+      secretName: litellm-tls
+  rules:
+    - host: llm.caehomelab.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: litellm-api
+                port:
+                  number: 4000

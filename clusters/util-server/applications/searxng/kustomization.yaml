@@ -119,7 +119,7 @@ data:
   settings.yml: |
     # Basic SearXNG configuration
     server:
-      secret_key: "CHANGE_ME_SECRET_KEY"
+      secret_key: "66da04495cafe8799ab0e1adab08a4e198f2915639e6848c57ae8e4904f124d"
       limiter: true
       image_proxy: true
       default_http_headers:
