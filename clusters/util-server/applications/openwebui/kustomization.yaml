@@ -40,10 +40,10 @@ spec:
   ingressClassName: traefik-v2
   tls:
     - hosts:
-        - ai.example.com
+        - ai.caehomelab.com
       secretName: openwebui-tls
   rules:
-    - host: ai.example.com
+    - host: ai.caehomelab.com
       http:
         paths:
           - path: /

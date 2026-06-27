@@ -20,9 +20,9 @@ This repository contains the GitOps configuration for a single-node k3s Kubernet
 
 All internal services resolve via UDM Pro to `192.168.30.230`:
 
-- ai.example.com → Open WebUI
-- search.example.com → SearXNG
-- grafana.example.com → Grafana (future)
+- ai.caehomelab.com → Open WebUI
+- search.caehomelab.com → SearXNG
+- grafana.caehomelab.com → Grafana (future)
 
 ### Remote Access
 
@@ -135,7 +135,7 @@ Before deploying applications with TLS, you need to configure a ClusterIssuer fo
 3. Apply ClusterIssuer: `kubectl apply -f clusters/util-server/networking/cert-manager/clusterissuer.yaml`
 
 **Internal DNS Requirements**:
-- UDM Pro DNS must point `*.example.com` to Traefik at `192.168.30.230` before cert issuance
+- UDM Pro DNS must point `*.caehomelab.com` to Traefik at `192.168.30.230` before cert issuance
 
 ### Step 3: Deploy Applications (in order)
 
@@ -309,9 +309,9 @@ env:
 
 | Application | Public URL | Internal URL | Notes |
 |-------------|------------|--------------|-------|
-| **Open WebUI** | https://ai.example.com | http://openwebui:8080 | Main LLM UI |
-| **LiteLLM** | https://llm.example.com | http://litellm-api:4000 | Unified LLM proxy |
-| **SearXNG** | https://search.example.com | http://searxng-api:8080 | Search engine |
+| **Open WebUI** | https://ai.caehomelab.com | http://openwebui:8080 | Main LLM UI |
+| **LiteLLM** | https://llm.caehomelab.com | http://litellm-api:4000 | Unified LLM proxy |
+| **SearXNG** | https://search.caehomelab.com | http://searxng-api:8080 | Search engine |
 | **MCPO** | ClusterIP only | http://mcpo:8000 | MCP Server (no ingress) |
 | **Ollama** | ClusterIP only | http://ollama-api:11434 | Local LLM (no ingress) |
 
@@ -457,9 +457,9 @@ MIT
 
 | Application | Namespace | Internal URL | Description |
 |-------------|-----------|--------------|-------------|
-| Open WebUI | ai | ai.example.com | LLM UI |
+| Open WebUI | ai | ai.caehomelab.com | LLM UI |
 | MCPO | ai | ClusterIP only | MCP Server |
-| SearXNG | ai | search.example.com | Search engine |
+| SearXNG | ai | search.caehomelab.com | Search engine |
 | Ollama | ai | ClusterIP only | Local LLM runtime |
 
 ## Services
@@ -483,7 +483,7 @@ MIT
                         │
                         ▼
                 ┌───────────────┐
-                │ ui.example.com │
+                │ ui.caehomelab.com │
                 │               │ (192.168.30.230)
                 └───────┬───────┘
                         │

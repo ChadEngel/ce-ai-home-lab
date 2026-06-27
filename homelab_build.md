@@ -211,13 +211,13 @@ UDM Pro
 Example records:
 
 ```
-ai.example.com
+ai.caehomelab.com
 
-grafana.example.com
+grafana.caehomelab.com
 
-search.example.com
+search.caehomelab.com
 
-ha.example.com
+ha.caehomelab.com
 ```
 
 All resolve internally to
@@ -280,11 +280,11 @@ Whether on LAN or connected through Tailscale, applications are accessed using t
 Example:
 
 ```
-https://ai.example.com
+https://ai.caehomelab.com
 
-https://grafana.example.com
+https://grafana.caehomelab.com
 
-https://search.example.com
+https://search.caehomelab.com
 ```
 
 ---
@@ -431,7 +431,7 @@ Final architecture
 
                         |
 
-                  ai.example.com
+                  ai.caehomelab.com
                         |
 
                  192.168.30.230

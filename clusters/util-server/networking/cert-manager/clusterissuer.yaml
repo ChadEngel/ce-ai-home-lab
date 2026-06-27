@@ -5,7 +5,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@example.com
+    email: admin@caehomelab.com
     privateKeySecretRef:
       name: letsencrypt-prod-account
     solvers:
@@ -13,7 +13,7 @@ spec:
           dns01:
             provider: godaddy
           zones:
-            - example.com
+            - caehomelab.com
 
 ---
 # Create GoDaddy DNS credentials secret

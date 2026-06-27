@@ -69,13 +69,13 @@ Before applying, **edit the file** to update:
 
 1. **Email address** for Let's Encrypt notifications:
 ```yaml
-email: your-email@example.com
+email: your-email@caehomelab.com
 ```
 
 2. **Your domain name** (you may need multiple issuers for different domains):
 ```yaml
 zones:
-  - example.com  # Replace with your actual domain
+  - caehomelab.com  # Replace with your actual domain
 ```
 
 3. **Apply credentials** (from the secret created in Step 2):
@@ -141,7 +141,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: your-email@example.com
+    email: your-email@caehomelab.com
     privateKeySecretRef:
       name: letsencrypt-staging-account
     solvers:
@@ -149,7 +149,7 @@ spec:
           dns01:
             provider: godaddy
           zones:
-            - example.com
+            - caehomelab.com
 ```
 
 2. **Apply the staging ClusterIssuer**:
@@ -173,7 +173,7 @@ metadata:
 spec:
   secretName: test-cert-tls
   dnsNames:
-    - test.example.com
+    - test.caehomelab.com
   issuerRef:
     name: letsencrypt-staging
     kind: ClusterIssuer
@@ -208,9 +208,9 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - ai.example.com
-    - llm.example.com
-    - search.example.com
+    - ai.caehomelab.com
+    - llm.caehomelab.com
+    - search.caehomelab.com
   secretTemplate:
     annotations:
       cert-manager.io/acme-certificates: "true"
@@ -239,7 +239,7 @@ These should resolve to your Traefik IP:
 
 | Domain | Type | Value | TTL |
 |---------|------|------|-----|
-| `*.example.com` | A | `192.168.30.230` | 300 |
+| `*.caehomelab.com` | A | `192.168.30.230` | 300 |
 
 ### For DNS-01 Challenge
 
@@ -283,8 +283,8 @@ Common issues:
 After certificate issuance, verify the records:
 
 ```bash
-dig any.example.com
-dig _acme-challenge.any.example.com
+dig any.caehomelab.com
+dig _acme-challenge.any.caehomelab.com
 ```
 
 You should see the A record pointing to `192.168.30.230`.

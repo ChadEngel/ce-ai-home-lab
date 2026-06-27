@@ -10,9 +10,9 @@ spec:
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
-  commonName: "secrets.example.com"
+  commonName: "secrets.caehomelab.com"
   dnsNames:
-    - secrets.example.com
+    - secrets.caehomelab.com
 
 ---
 apiVersion: v1

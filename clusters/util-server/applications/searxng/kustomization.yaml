@@ -40,10 +40,10 @@ spec:
   ingressClassName: traefik-v2
   tls:
     - hosts:
-        - search.example.com
+        - search.caehomelab.com
       secretName: searxng-tls
   rules:
-    - host: search.example.com
+    - host: search.caehomelab.com
       http:
         paths:
           - path: /

@@ -47,17 +47,17 @@ If no keys exist (or you want to create a new one), continue to **Step 2**.
 #### Option A: ED25519 (Recommended - Most Secure)
 
 ```bash
-ssh-keygen -t ed25519 -C "your_email@example.com"
+ssh-keygen -t ed25519 -C "your_email@caehomelab.com"
 ```
 
 **Where:**
 - `-t ed25519`: Use ED25519 algorithm (modern, secure)
-- `-C "your_email@example.com"`: Add your email as comment (helps identify the key)
+- `-C "your_email@caehomelab.com"`: Add your email as comment (helps identify the key)
 
 #### Option B: RSA (Compatible with older systems)
 
 ```bash
-ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+ssh-keygen -t rsa -b 4096 -C "your_email@caehomelab.com"
 ```
 
 **Where:**

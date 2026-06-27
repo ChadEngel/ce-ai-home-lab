@@ -32,10 +32,10 @@ The architecture leverages **NFS storage**, **TLS certificates**, **Ingress rout
   - `80/TCP` - HTTP (for Let's Encrypt DNS-01 validation)
   - `8443/TCP` - Tailscale
 - **External DNS** configured for:
-  - `ai.example.com`
-  - `llm.example.com`
-  - `secrets.example.com`
-  - `search.example.com`
+  - `ai.caehomelab.com`
+  - `llm.caehomelab.com`
+  - `secrets.caehomelab.com`
+  - `search.caehomelab.com`
 
 ### Storage Requirements
 
@@ -90,10 +90,10 @@ The architecture leverages **NFS storage**, **TLS certificates**, **Ingress rout
            ┌───────────▼──────────────────┐
            │    Internet DNS              │
            │    (public domain)           │
-           │    ai.example.com            │
-           │    llm.example.com           │
-           │    secrets.example.com       │
-           │    search.example.com        │
+           │    ai.caehomelab.com            │
+           │    llm.caehomelab.com           │
+           │    secrets.caehomelab.com       │
+           │    search.caehomelab.com        │
            └───────┬──────────────────────┘
                    │
                    ▼
@@ -231,10 +231,10 @@ The architecture leverages **NFS storage**, **TLS certificates**, **Ingress rout
 4. **[ ] Configure DNS**
    - UDM Pro DNS at `192.168.30.121`
    - Records:
-     - `ai.example.com` → `192.168.30.230`
-     - `llm.example.com` → `192.168.30.230`
-     - `secrets.example.com` → `192.168.30.230`
-     - `search.example.com` → `192.168.30.230`
+     - `ai.caehomelab.com` → `192.168.30.230`
+     - `llm.caehomelab.com` → `192.168.30.230`
+     - `secrets.caehomelab.com` → `192.168.30.230`
+     - `search.caehomelab.com` → `192.168.30.230`
 
 5. **[ ] Configure Let's Encrypt DNS provider**
    - API token for DNS provider (e.g., Cloudflare, Route53)
@@ -287,7 +287,7 @@ The architecture leverages **NFS storage**, **TLS certificates**, **Ingress rout
    ```
 
 4. **Initialize Infisical (secrets management):**
-   - Access: https://secrets.example.com
+   - Access: https://secrets.caehomelab.com
    - Create project and environments
    - Sync secrets to Kubernetes resources
 
@@ -331,4 +331,4 @@ kubectl describe ingress -n ai
 kubectl get certificate -n ai
 
 # Check network connectivity
-curl -f https://ai.example.com
+curl -f https://ai.caehomelab.com

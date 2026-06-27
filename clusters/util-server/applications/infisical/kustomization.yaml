@@ -116,10 +116,10 @@ spec:
   ingressClassName: traefik-v2
   tls:
     - hosts:
-        - secrets.example.com
+        - secrets.caehomelab.com
       secretName: infisical-ssl-certs
   rules:
-    - host: secrets.example.com
+    - host: secrets.caehomelab.com
       http:
         paths:
           - path: /

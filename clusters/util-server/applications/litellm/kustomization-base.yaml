@@ -104,10 +104,10 @@ spec:
   ingressClassName: traefik-v2
   tls:
     - hosts:
-        - llm.example.com
+        - llm.caehomelab.com
       secretName: litellm-tls
   rules:
-    - host: llm.example.com
+    - host: llm.caehomelab.com
       http:
         paths:
           - path: /

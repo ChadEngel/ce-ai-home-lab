@@ -11,7 +11,7 @@ data:
   OLLAMA_API_BASE_URL: "http://ollama-api.ai.svc.cluster.local:11434"
 
 # When using Infisical for secrets management:
-# 1. Create project in Infisical at https://secrets.example.com
+# 1. Create project in Infisical at https://secrets.caehomelab.com
 # 2. Create environment (prod, staging, dev)
 # 3. Create secrets for each application
 # 4. Set up webhook to sync secrets to Kubernetes Secret resources

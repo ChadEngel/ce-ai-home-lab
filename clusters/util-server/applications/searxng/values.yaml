@@ -43,14 +43,14 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 0
   hosts:
-    - host: search.example.com
+    - host: search.caehomelab.com
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: searxng-tls
       hosts:
-        - search.example.com
+        - search.caehomelab.com
 
 storage:
   enabled: true
