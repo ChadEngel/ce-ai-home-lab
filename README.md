@@ -80,12 +80,15 @@ For a complete infrastructure requirements overview and architecture diagram, se
 
 ## Quick Start - All-in-One Deployment
 
-### Step 1: Clone Repository
+### Step 1: Clone Repository (SSH)
 
 ```bash
-git clone https://github.com/ChadEngel/ce-ai-home-lab.git
+# Clone using SSH (recommended)
+git clone git@github.com:ChadEngel/ce-ai-home-lab.git
 cd ce-ai-home-lab
 ```
+
+> **Note**: If you haven't set up SSH keys yet, see [How to Create GitHub SSH Keys](./docs/how-to-create-github-ssh-key.md) for setup instructions.
 
 ### Step 2: Apply Basic Infrastructure
 
