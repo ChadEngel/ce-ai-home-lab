@@ -1,5 +1,5 @@
 ## Open WebUI configuration
-## https://ghcr.io/open-webui/open-webui
+## https://github.com/open-webui/open-webui
 
 image:
   repository: ghcr.io/open-webui/open-webui
@@ -10,49 +10,67 @@ pod:
   replicas: 1
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 250m
+      memory: 1Gi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: "2"
+      memory: "2Gi"
 
 service:
   type: ClusterIP
   port: 8080
 
+env:
+  - name: WEBUI_NAME
+    value: "Open WebUI"
+  - name: DEFAULT_MODELS
+    value: "llama3.2:latest"
+  - name: OLLAMA_BASE_URL
+    value: "http://aiserver.home:11434"
+  - name: WEBUI_SECRET_KEY
+    value: "CHANGE_ME_SECRET_KEY"
+  - name: WEBUI_AUTH
+    value: "true"
+  - name: ENABLE_SIGNUP
+    value: "true"
+  - name: RAG_EMBEDDING_ENGINE
+    value: "ollama"
+  - name: HF_HUB_OFFLINE
+    value: "1"
+  - name: DISABLE_MODEL_LOADING
+    value: "true"
+  - name: DEFAULT_LOCALE
+    value: "en"
+  - name: HF_HUB_DISABLE_TELEMETRY
+    value: "1"
+  - name: ENABLE_COMMUNITY_SHARING
+    value: "false"
+  - name: MESSAGE_RETENTION_DAYS
+    value: "-1"
+
 ingress:
   enabled: true
   annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+    ingress.kubernetes.io/proxy-body-size: "0"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
     - host: ai.caehomelab.com
       paths:
         - path: /
           pathType: Prefix
-          serviceName: openwebui
-          servicePort: 8080
   tls:
     - secretName: openwebui-tls
       hosts:
         - ai.caehomelab.com
 
-persistence:
+storage:
   enabled: true
   size: 5Gi
   storageClass: nfs-client
-  mountPath: /app/backend/data
   accessModes:
     - ReadWriteOnce
+  mountPath: /app/backend/data
 
-env:
-  - name: WEBUI_NAME
-    value: "Open WebUI"
-  - name: DEFAULT_MODELS
-    value: "ollama/local-host"
-  - name: OLLAMA_BASE_URL
-    value: "http://ollama-api.ai.svc.cluster.local:11434"
-
-# Add authentication here if needed
-# auth:
-#   enabled: false
-#   password: ""
+healthcheck:
+  path: /
+  port: 8080

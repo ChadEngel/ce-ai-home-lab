@@ -1,0 +1,112 @@
+{
+  "id": null,
+  "uid": "ceai-k8s-monitoring",
+  "title": "CE AI Lab - Kubernetes Realtime View",
+  "tags": [
+    "kubernetes",
+    "homelab"
+  ],
+  "timezone": "browser",
+  "refresh": "10s",
+  "style": "dark",
+  "schemaVersion": 36,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "CPU Load Average",
+      "datasource": { 
+        "type": "influxdb", 
+        "uid": "dfdkew37wk1dse"  
+      },
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": { "unit": "percent" },
+        "thresholds": { "steps": [
+          {"color": "green", "value": null}, 
+          {"color": "orange", "value": 65},
+          {"color": "red", "value": 80} 
+        ]}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "rawQuery": true,
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r[\"_measurement\"] == \"cpu_load_pct\") |> aggregateWindow(every: 1m, fn: mean)",
+          "refId": "A"
+        }
+      ]      
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Memory Free Percentage",
+      "datasource": { 
+        "type": "influxdb", 
+        "uid": "dfdkew37wk1dse"  
+      },
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+      "fieldConfig": {
+        "defaults": { "unit": "percent" },
+          "thresholds": { "steps": [
+            {"color": "green", "value": null}, 
+            {"color": "yellow", "value": 20}, 
+            {"color": "red", "value": 10} 
+          ]}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "rawQuery": true,
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r[\"_measurement\"] == \"mem_free_pct\") |> aggregateWindow(every: 1m, fn: mean)",
+          "refId": "B"
+        }
+      ]      
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Node Uptime (Seconds)",
+      "datasource": { 
+        "type": "influxdb", 
+        "uid": "dfdkew37wk1dse"  
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "rawQuery": true,
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r[\"_measurement\"] == \"node_uptime_sec\") |> keep(columns: [\"_value\", \"_time\"]) |> yield(name: \"uptime_trend\")",
+          "refId": "C"
+        }
+      ]      
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total Nodes",
+      "datasource": { 
+        "type": "influxdb", 
+        "uid": "dfdkew37wk1dse"  
+      },
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+          "thresholds": { "steps": [
+            {"color": "green", "value": null} 
+          ]}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "rawQuery": true,
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r[\"_measurement\"] == \"node_count\") |> last()",
+          "refId": "D"
+        }
+      ]      
+    }
+  ],
+  "time": { "from": "now-5m", "to": "now" },
+  "description": "CE AI Lab Kubernetes Monitoring Dashboard pointing to InfluxDB (dfdkew37wk1dse)"
+}

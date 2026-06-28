@@ -13,8 +13,8 @@ pod:
       cpu: 50m
       memory: 128Mi
     limits:
-      cpu: 250m
-      memory: 256Mi
+      cpu: 500m
+      memory: 512Mi
 
 service:
   type: ClusterIP
@@ -25,14 +25,18 @@ env:
     value: |
       server:
         secret_key: "CHANGE_ME_SECRET_KEY"
-        limiter: true
+        limiter: false
         image_proxy: true
+        method: "POST"
+        bot_detection:
+          enabled: false
         default_http_headers:
           X-Content-Type-Options: nosniff
           X-XSS-Protection: "1; mode=block"
           Referrer-Policy: no-referrer
       ui:
-        default_locale: "en-US"
+        default_locale: "en"
+        default_theme: simple
       search:
         formats:
           - html
@@ -41,7 +45,8 @@ env:
 ingress:
   enabled: true
   annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: 0
+    ingress.kubernetes.io/proxy-body-size: "0"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
     - host: search.caehomelab.com
       paths:
@@ -59,3 +64,7 @@ storage:
   accessModes:
     - ReadWriteOnce
   mountPath: /searxng/sessions
+
+healthcheck:
+  path: /
+  port: 8080

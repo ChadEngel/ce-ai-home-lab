@@ -113,7 +113,7 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: 50m
 spec:
-  ingressClassName: traefik-v2
+  ingressClassName: traefik
   tls:
     - hosts:
         - secrets.caehomelab.com

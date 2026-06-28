@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: influx-metrics-deployer
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: script-volume
+          configMap:
+            name: influx-scripts   # must exactly match the ConfigMap we created!
+            items:
+              - key: run_influx.sh
+                path: scripts/run_Influx.sh   # this ensures it lands at <mount>/scripts/run_influx.sh
+      containers:
+        - name: runner
+          image: alpine:3.20     # includes busybox (sh) + curl via apk add if needed
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Running script..."
+              /scripts/run_influx.sh
+              echo "Script finished!"
+          volumeMounts:
+            - name: script-volume
+              mountPath: /script  # the absolute path inside the container

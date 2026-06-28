@@ -543,3 +543,69 @@ For detailed test coverage, see the [test script documentation](./scripts/deploy
 ## License
 
 MIT
+
+
+## 📋 Current Infrastructure Status (Updated 2026-06-28)
+
+### ✅ Working Services
+
+| Service | URL | Status | Notes |
+|---------|-----|--------|-------|
+| **LiteLLM** | https://llm.caehomelab.com | ✅ Running | Swagger UI accessible, proxy service running |
+| **OpenWebUI** | https://ai.caehomelab.com | ✅ Running | Web UI accessible with websockets/SSL working |
+| **SearXNG** | https://search.caehomelab.com | ✅ Running | Search engine working |
+| **cert-manager** | - | ✅ Ready | All 4 certificates issued (letsencrypt-prod) |
+| **Traefik** | 192.168.30.217 | ✅ Running | LoadBalancer ingress controller |
+| **MetalLB** | 192.168.30.217 | ✅ Running | IP pool: 192.168.30.230-240 |
+| **NFS Provisioner** | 192.168.30.121:/data/pod_data | ✅ Running | StorageClass: nfs-client |
+
+### ⚠️ Known Issues
+
+#### 1. Infisical - Image Pull Error
+- **Service**: https://secrets.caehomelab.com (ingress created, certificate issued)
+- **Issue**: `ImagePullBackOff` / `ErrImagePull` for all Infisical images
+- **Attempted**: 
+  - `ghcr.io/infisical/infisical-platform:latest` → 403 Forbidden
+  - `infisical/infisical-platform:latest` → ErrImagePull
+  - `infisical/platform-backend:latest` → ErrImagePull
+
+**Resolution Required**: The official Infisical Docker images are either private or have been moved/renamed. You'll need to either:
+- Provide Docker Hub credentials in the cluster
+- Build your own Docker image from the Infisical source code
+- Use a different version/tag of the Infisical image
+
+#### 2. DNS Resolution Fix Required
+- All domains (`ai.caehomelab.com`, `llm.caehomelab.com`, `search.caehomelab.com`, `secrets.caehomelab.com`)
+- Set their A records to point to **192.168.30.217** (Traefik LB IP), NOT 192.168.30.230 (old IP)
+
+**Fix applied via Cloudflare API** on 2026-06-28. If you need to fix DNS again in the future:
+
+```bash
+TOKEN="your-cloudflare-token"
+ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=caehomelab.com" | grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
+for DOMAIN in ai.caehomelab.com search.caehomelab.com secrets.caehomelab.com llm.caehomelab.com; do
+  curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?type=A&name=$DOMAIN" | grep -o '"id":"[^"]*" | head -1
+done
+```
+
+### 📦 Certificates (All Issued by Let's Encrypt)
+- `llm.caehomelab.com` → `litellm-tls` ✅
+- `ai.caehomelab.com` → `openwebui-tls` ✅
+- `search.caehomelab.com` → `searxng-tls` ✅
+- `secrets.caehomelab.com` → `infisical-ssl-certs` ✅ (ready, but Infisical needs to be running)
+
+### 📁 Config Changes Applied
+1. **cloudflare-secrets.yaml** → Updated with real Cloudflare API token
+2. **searxng/_values/values.yaml** → Fixed locale (`en` instead of `en-US`), added bot_detection disabled
+3. **openwebui/_values/values.yaml** → Added proper env vars (HF_HUB_OFFLINE, RAG_EMBEDDING_ENGINE, etc)
+4. **clusterissuer.yaml** → Updated Cloudflare token placeholder
+5. **Ingress classes** → Changed from `traefik-v2` to `traefik` (k3s addon compatibility)
+
+### 🔑 Cloudflare DNS Records
+All A records for caehomelab.com domains point to **192.168.30.217** (Traefik LoadBalancer IP)
+
+### 🛠️ Troubleshooting Notes
+- **Traefik addon in k3s**: Uses `ingressClassName: traefik` (NOT `traefik-v2`)
+- **SearXNG bot detection**: Had to disable `limiter` and `bot_detection` to avoid X-Forwarded-For requirements
+- **OpenWebUI**: Must set `HF_HUB_OFFLINE=1` to avoid infinite HuggingFace sync
+- **LiteLLM**: Running as single pod proxy for AI model routing

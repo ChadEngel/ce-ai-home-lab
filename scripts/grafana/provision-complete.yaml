@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provisioning
+data:
+ datasources.yaml: |
+    apiVersion: 1
+    deleteDatasources: []
+    datasources:
+      - name: InfluxDB
+        type: influxdb
+        access: proxy
+        orgId: 1
+        url: http://aiserver.home
+        version: 1
+        editable: false
+        jsonData:
+         defaultBucket: "kube_metrics"
