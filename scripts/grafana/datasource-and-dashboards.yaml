@@ -18,6 +18,7 @@ data:
           tokenSecretKeyRef:
             key: "token_key_ref"  # Use the bucket or token!
           defaultBucket: "kube_metrics"
+          org: "home"
           
   dashboards.yaml: |
     apiVersion: 1

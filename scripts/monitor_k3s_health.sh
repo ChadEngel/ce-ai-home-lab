@@ -2,7 +2,7 @@
 # CE AI Lab - K3s Cluster Health Metrics Pusher
 # Sends raw counters to InfluxDB every 60 seconds.
 
-INFLUX_URL="http://aiserver.home:8086/api/v2/write?org=home&bucket=k3s_metrics&precision=s"
+INFLUX_URL="http://aiserver.home:8086/api/v2/write?org=home&bucket=kube_metrics&precision=s"
 TOKEN="INFLUX_TOKEN_REDACTED"
 LOG="/var/log/k3s-metrics-push.log"
 
