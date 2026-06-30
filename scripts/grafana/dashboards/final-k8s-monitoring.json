@@ -12,89 +12,231 @@
   "style": "dark",
   "schemaVersion": 36,
   "version": 1,
-  "datasource": {
-    "type": "influxdb", 
-    "uid": "dfdkew37wk1dse"  
+  "templating": {
+    "list": [
+      {
+        "name": "cluster_datasource",
+        "type": "datasource",
+        "query": "influxdb",
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "options": true,
+        "refresh": 1,
+        "regex": "",
+        "sort": 0,
+        "label": "Data Source"
+      }
+    ]
   },
   "panels": [
     {
       "id": 1,
       "type": "stat",
-      "title": "CPU Load Average (Non-Idle)",
-      "datasource": { 
-        "type": "influxdb", 
-        "uid": "dfdkew37wk1dse"  
+      "title": "Kubernetes Node Health (%)",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "$cluster_datasource"
       },
-      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
-      "fieldConfig": {
-        "defaults": { "unit": "percent", "max": 100, "min": 0 }
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 0
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "$cluster_datasource"
+          },
           "rawQuery": true,
-          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r[\"_measurement\"] == \"k8s_node_metrics\") |> map(fn: (r) => ({{ _mean }} * 10.0)) |> last() |> yield(name: \"cpu_load_pct\")"
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"nodes_ready_pct\") |> aggregateWindow(every: 1m, fn: last)"
         }
-      ]      
+      ]
     },
     {
       "id": 2,
-      "type": "stat", 
-      "title": "Memory Free %",
-      "datasource": { 
-        "type": "influxdb", 
-        "uid": "dfdkew37wk1dse"  
+      "type": "stat",
+      "title": "Total Nodes",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "$cluster_datasource"
       },
-      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
-      "fieldConfig": {
-        "defaults": { "unit": "percent", "max": 100, "min": 0 }
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "$cluster_datasource"
+          },
           "rawQuery": true,
-          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r[\"_measurement\"] == \"k8s_node_metrics\") |> last() |> map(fn: (r) => ({{ mem_free_bytes }} / {{ mem_total_bytes }}) * 100.0)"
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"nodes_total\") |> last()"
         }
-      ]      
+      ]
     },
     {
       "id": 3,
-      "type": "timeseries",
-      "title": "Node Uptime Trending (Seconds)", 
-      "datasource": { 
-        "type": "influxdb", 
-        "uid": "dfdkew37wk1dse"  
+      "type": "stat",
+      "title": "Nodes Ready",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "$cluster_datasource"
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "$cluster_datasource"
+          },
           "rawQuery": true,
-          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r[\"_measurement\"] == \"k8s_node_metrics\") |> keep(columns: [\"total_uptime_sec\", \"_time\"]) |> yield(name: \"uptime_trend\")"
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"nodes_total\") |> last()"
         }
-      ]      
+      ]
     },
     {
       "id": 4,
-      "type": "stat", 
-      "title": "Total Memory (GB)",
-      "datasource": { 
-         "type": "influxdb", 
-         "uid": "dfdkew37wk1dse"  
-       },
-      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
-      "fieldConfig": {
-        "defaults": { "unit": "bytes", "decimals": 2 }
+      "type": "stat",
+      "title": "Total Pods Running",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "$cluster_datasource"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 4
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "$cluster_datasource"
+          },
           "rawQuery": true,
-          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r[\"_measurement\"] == \"k8s_node_metrics\") |> last() |> keep(columns: [\"mem_total_bytes\"])|> yield(name: \"total_mem_bytes\")"
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"pods_total\") |> last()"
         }
-      ]      
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Pods Pending/Failing",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "$cluster_datasource"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "$cluster_datasource"
+          },
+          "rawQuery": true,
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"pods_failed_pending\") |> last()"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Stuck PV Count",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "$cluster_datasource"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "$cluster_datasource"
+          },
+          "rawQuery": true,
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"stuck_pv_count\") |> last()"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Node Health Trend (%)",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "$cluster_datasource"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 6,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "$cluster_datasource"
+          },
+          "rawQuery": true,
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"nodes_ready_pct\") |> aggregateWindow(every: 1m, fn: last)"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Pod Status Trend",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "$cluster_datasource"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "$cluster_datasource"
+          },
+          "rawQuery": true,
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and (r._field == \"pods_total\" or r._field == \"pods_failed_pending\")) |> aggregateWindow(every: 1m, fn: last)"
+        }
+      ]
     }
   ],
-  "time": { "from": "now-5m", "to": "now" },
-  "description": "CE AI Lab Kubernetes Metrics View. Raw counters go to Influx, Flux performs the math."
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "description": "Kubernetes cluster monitoring. Raw counters pushed by monitor_k3s_health.sh, Flux/InfluxDB stores the data.",
+  "schemaVersion": 36,
+  "version": 12
 }
