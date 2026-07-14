@@ -8,6 +8,7 @@
 # 3. openwebui - Main AI interface (connects to external ollama on aiserver.home)
 # 4. infisical - Secrets management
 # 5. searxng - Search engine
+# 6. grafana - Monitoring dashboard
 #
 # Note: MCPo is not deployed (no published Docker images yet)
 # Note: Ollama runs on separate server aiserver.home, not in Kubernetes
@@ -47,6 +48,11 @@ echo ""
 echo ">>> Step 5: Deploying SearXNG..."
 $SCRIPT_DIR/deploy-searxng.sh
 
+# Step 6: Deploy Grafana
+echo ""
+echo ">>> Step 6: Deploying Grafana..."
+$SCRIPT_DIR/deploy-grafana.sh
+
 echo ""
 echo "=============================================="
 echo "All applications deployed!"
@@ -55,7 +61,7 @@ echo ""
 echo "Access URLs:"
 echo "  OpenWebUI:   https://ai.caehomelab.com"
 echo "  Infisical:   https://infisical.caehomelab.com"
-echo "  SearXNG:     https://search.caehomelab.com"
+echo "  Grafana:     https://grafana.caehomelab.com"
 echo ""
 echo "Run './scripts/check-deployments.sh' to verify all pods are running."
 echo ""

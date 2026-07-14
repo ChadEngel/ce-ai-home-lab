@@ -36,9 +36,10 @@ metadata:
   namespace: ai
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
     nginx.ingress.kubernetes.io/proxy-body-size: 50m
 spec:
-  ingressClassName: traefik-v2
+  ingressClassName: traefik
   tls:
     - hosts:
         - ai.caehomelab.com
@@ -89,11 +90,11 @@ spec:
               value: "http://aiserver.home:11434"
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 1Gi
+            limits:
+              cpu: 2
+              memory: 2Gi
           volumeMounts:
             - name: openwebui-data
               mountPath: /app/backend/data

@@ -1,0 +1,53 @@
+## Grafana configuration
+## https://github.com/grafana/grafana
+
+image:
+  repository: grafana/grafana
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+service:
+  type: ClusterIP
+  port: 3000
+
+env:
+  GF_ADMIN_USER: admin
+  GF_ADMIN_PASSWORD: ""  # Set via Secret or prompt on first login
+  GF_INFLUXDB_V2_ORGS: home
+  GF_SECURITY_ALLOW_EMBEDDING: "true"
+
+ingress:
+  enabled: true
+  className: traefik-v2
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: grafana.caehomelab.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: grafana-tls
+      hosts:
+        - grafana.caehomelab.com
+
+storage:
+  size: 5Gi
+  storageClass: nfs-client
+  accessModes:
+    - ReadWriteOnce
+  mountPath: /var/lib/grafana
+
+healthcheck:
+  path: /api/health
+  port: 3000
