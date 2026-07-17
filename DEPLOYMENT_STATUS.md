@@ -45,7 +45,7 @@
 
 | Service | URL | Ingress | Certificate | Status |
 |---------|-----|--------|-------|------|
-| **LiteLLM** | https://llm.caehomelab.com | ✅ traefik | ✅ letsencrypt-prod | **OPERATIONAL** |
+| **Bifrost** (replaces LiteLLM) | https://llm.caehomelab.com | ✅ traefik | ✅ letsencrypt-prod | **REPLACED**—deploy with `deploy-bifrost.sh` |
 | **OpenWebUI** | https://ai.caehomelab.com | ✅ traefik | ✅ letsencrypt-prod | **OPERATIONAL** |
 | **SearXNG** | https://search.caehomelab.com | ✅ traefik | ✅ letsencrypt-prod | **OPERATIONAL** |
 | **Infisical** | https://secrets.caehomelab.com | ✅ traefik | ✅ issued (unused) | **DOWN** - image pull error |
@@ -80,8 +80,9 @@
 
 Test each service:
 ```bash
-# Test LiteLLM
-curl -sk https://llm.caehomelab.com/ | grep -i swagger
+# Test Bifrost (after deployment)
+curl -sk https://llm.caehomelab.com/v1/models\
+  -H "Authorization: Bearer sk-bifrost-secret-key-change-me"
 
 # Test OpenWebUI  
 curl -sk https://ai.caehomelab.com/ | grep -i "Open WebUI"
@@ -92,9 +93,29 @@ curl -sk https://search.caehomelab.com/ | grep -i "SearXNG"
 # Check certificates
 kubectl get certificates -n ai
 ```
+## 🔄 LiteLLM ➜ Bifrost Migration
 
-## 🚀 Next Steps
+Bifrost is a high-performance AI gateway that replaces LiteLLM. Key differences:
+- **Port**: 4000 ⏪ 8080 (same ingress hostname: llm.caehomelab.com, same OpenAI-compatible API)
+- **Config**: Web UI at https://llm.caehomelab.com (**not** YAML config files) — add providers via Settings → Providers after deploy
+- **Image**: `maximhq/bifrost:latest` (Go-based, much faster than LiteLLM's Node.js/Python proxy)
+- **Deployment**: Use `./scripts/deploy-bifrost.sh` instead of `deploy-litellm.sh`
+- **OpenWebUI**: ConfigMap updated to point at `bifrost-api.ai.svc.cluster.local:8080`
 
+### What's done:
+- ✅ Created `clusters/util-server/applications/bifrost/` with Kustomize manifests
+- ✅ Created `scripts/deploy-bifrost.sh`
+- ✅ Updated `scripts/deploy-all.sh` (Bifrost is now Step 1)
+- ✅ Replaced `litellm/openwebui-ollama-config.yaml` → `openwebui/bifrost-config.yaml`
+- ✅ Updated all documentation (README, scripts/README.md, check-deployments.sh, deployment-test.sh)
+- ✅ Removed: `litellm/*`, `deploy-litellm.sh`, `deploy-litellm-config.sh`
+
+### Next steps:
+1. Run `./scripts/deploy-bifrost.sh` to deploy the gateway
+2. Visit https://llm.caehomelab.com → Settings → Providers to configure your API keys
+3. Update models in OpenWebUI to use Bifrost format:
+   - Ollama: `ollama/chat/llama3`
+   - OpenRouter: `openrouter/meta-llama/llama-3-70b-instruct` |
 1. **Fix Infisical:** Find correct Docker image or build custom
 2. **Document:** Create setup guide for new cluster deployments
 3. **Monitor:** Check certificate renewal (90-day Let's Encrypt cycles)

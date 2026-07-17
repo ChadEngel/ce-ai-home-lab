@@ -35,19 +35,22 @@ Deploys OpenWebUI with the AI web interface.
 - Dependencies: LiteLLM (API proxy), Ollama (external on aiserver.home)
 - Ollama API: http://aiserver.home:11434
 
-### LiteLLM
-```bash
-./deploy-litellm.sh
+### Bifrost (AI Gateway) — replaces LiteLLM
 ```
-Deploys LiteLLM for LLM proxying and API management.
-- Service endpoint: http://litellm-api.ai.svc.cluster.local:4000
-- IMPORTANT: Update secrets and model API keys before use.
+./deploy-bifrost.sh
+```
+Deploys the Bifrost AI gateway on port 8080.
+- Service endpoint: http://bifrost-api.ai.svc.cluster.local:8080
+- **Web UI**: https://llm.caehomelab.com — configure your providers after deployment (Settings → Providers)
+- **IMPORTANT**: Set provider API keys via the web UI. Model names use `provider/model` format:
+  - Ollama:       `ollama/chat/llama3`
+  - OpenRouter:   `openrouter/meta-llama/llama-3-70b-instruct`
 
-### LiteLLM Config
-```bash
-./deploy-litellm-config.sh
+### Bifrost Config for OpenWebUI
 ```
-Deploys the OpenWebUI-to-LiteLLM configuration map.
+kubectl apply -f clusters/util-server/applications/openwebui/bifrost-config.yaml
+```
+Updates the OpenWebUI configMap to point to the Bifrost API gateway.
 - Required for OpenWebUI to connect to LiteLLM models.
 
 ### MCPo
@@ -85,11 +88,21 @@ Deploys Infisical for secrets management.
 
 For the best results, deploy Kubernetes applications in this order:
 
-1. **litellm** - API proxy layer
-2. **litellm-config** - Configuration for Open WebUI to connect to external Ollama
-3. **openwebui** - Main AI interface (requires LiteLLM running)
-4. **infisical** - Secrets management
-5. **searxng** - Search engine (standalone, no dependencies)
+1. **bifrost** - AI gateway (configure providers via web UI at https://llm.caehomelab.com)
+2. **openwebui** - Main AI interface (requires Bifrost running on :8080)
+3. **infisical** - Secrets management
+4. **searxng** - Search engine (standalone, no dependencies)
+
+## Migration Notes: LiteLLM ➜ Bifrost
+
+Bifrost is a drop-in replacement for LiteLLM at the network level:
+- Same hostname: `llm.caehomelab.com` (`/v1/chat/completions` compatible)
+- OpenWebUI config updated: `OLLAMA_BASE_URL=http://bifrost-api.ai.svc.cluster.local:8080/v1`
+- Port changed: 4000 ➜ 8080
+- Model names change format:
+  - LiteLLM style:   `ollama/chat/llama3`, `openrouter/meta-llama/...` (same)
+  - OpenWebUI config: points to `bifrost-api` service instead of `litellm-api`
+- **Key difference**: Bifrost is configured via its web UI (**not** YAML config files). Deploy first, then visit the Ingress to set up providers.
 
 **Note**: MCPo not deployed (no published Docker images available yet)
 

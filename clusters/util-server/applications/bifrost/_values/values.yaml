@@ -1,0 +1,60 @@
+## Bifrost (AI Gateway) configuration
+## https://github.com/maximhq/bifrost
+## 
+# NOTE: Bifrost is primarily configured via its built-in web UI (deploy first, then visit the Ingress).
+# Environment variables below provide initial setup hints only.
+
+image:
+  repository: maximhq/bifrost
+  tag: latest
+  pullPolicy: Always
+
+pod:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+service:
+  type: ClusterIP
+  port: 8080
+
+env:
+  # Port (must match containerPort)
+  - name: PORT
+    value: "8080"
+  
+  # Runtime
+  - name: NODE_ENV
+    value: "production"
+  
+  # API authentication key (set via Secret, see kustomization.yaml)
+  - name: BIFROST_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: bifrost-secrets
+        key: BIFROST_API_KEY
+
+ingress:
+  enabled: true
+  hosts:
+    - host: llm.caehomelab.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: bifrost-tls
+      hosts:
+        - llm.caehomelab.com
+
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: nfs-client
+  accessModes:
+    - ReadWriteOnce
+  mountPath: /app/data

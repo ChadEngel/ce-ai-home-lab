@@ -1,0 +1,123 @@
+# Bifrost AI Gateway (replaces LiteLLM)
+# https://github.com/maximhq/bifrost
+# 
+# OpenAI-compatible API gateway with web UI for provider configuration.
+# - Port 8080 (Bifrost default HTTP server)
+# - Web UI at / on the Ingress
+# - Configure providers (Ollama, OpenRouter, etc.) via the UI after deployment
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bifrost-api
+  namespace: ai
+spec:
+  type: ClusterIP
+  selector:
+    app: bifrost
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bifrost-secrets
+  namespace: ai
+type: Opaque
+stringData:
+  BIFROST_API_KEY: "sk-bifrost-secret-key-change-me"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bifrost-pvc
+  namespace: ai
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bifrost
+  namespace: ai
+  labels:
+    app: bifrost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bifrost
+  template:
+    metadata:
+      labels:
+        app: bifrost
+    spec:
+      containers:
+        - name: bifrost
+          image: maximhq/bifrost:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: NODE_ENV
+              value: "production"
+            - name: BIFROST_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bifrost-secrets
+                  key: BIFROST_API_KEY
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: bifrost-pvc
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bifrost-ingress
+  namespace: ai
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik-v2
+  tls:
+    - hosts:
+        - llm.caehomelab.com
+      secretName: litellm-tls
+  rules:
+    - host: llm.caehomelab.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bifrost-api
+                port:
+                  number: 8080

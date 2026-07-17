@@ -297,7 +297,7 @@ for pod in $(kubectl get pods -n "$NAMESPACE" --output=jsonpath='{.items[*].meta
 done
 
 print_section "SERVICES"
-check_service_available "litellm-api"
+check_service_available "bifrost-api"
 check_service_available "ollama-api"
 check_service_available "openwebui"
 check_service_available "searxng-api"
@@ -305,12 +305,12 @@ check_service_available "mcpo"
 
 print_section "INGRESS CONFIGURATION"
 check_ingress_configured "openwebui-ingress"
-check_ingress_configured "litellm-ingress"
+check_ingress_configured "bifrost-ingress"
 check_ingress_configured "searxng-ingress"
 
 print_section "CERTIFICATES"
 check_certificate "openwebui-tls" 2>/dev/null || warn "certificate openwebui" "May not be issued yet"
-check_certificate "litellm-tls" 2>/dev/null || warn "certificate litellm" "May not be issued yet"
+check_certificate "bifrost-tls" 2>/dev/null || warn "certificate bifrost" "May not be issued yet"
 check_certificate "searxng-tls" 2>/dev/null || warn "certificate searxng" "May not be issued yet"
 
 print_section "HELM RELEASES"
@@ -319,8 +319,8 @@ check_helm_release "traefik" "kube-system"
 check_helm_release "cert-manager" "cert-manager"
 
 print_section "CONFIGMAPS AND SECRETS"
-check_configmap "litellm-config"
-check_secret_exists "litellm-secrets"
+check_configmap "openwebui-bifrost-config"
+check_secret_exists "bifrost-secrets"
 check_secret_exists "infisical-secrets" 2>/dev/null || warn "infisical-secrets" "Infisical secrets may not be deployed"
 check_secret_exists "infisical-db-creds" 2>/dev/null || warn "infisical-db-creds" "Database credentials may not be deployed"
 
@@ -334,7 +334,8 @@ fi
 
 print_section "WEB APPLICATIONS ENDPOINTS"
 # These are internal endpoints (within cluster)
-test_url_endpoint "http://litellm-api.$NAMESPACE.svc.cluster.local:4000/health" 2>/dev/null || warn "litellm-api endpoint" "Internal service not directly accessible externally"
+print_section "DEPENDENCY CHECKS Bifrost to Ollama"
+test_url_endpoint "http://bifrost-api.$NAMESPACE.svc.cluster.local:8080/v1/models"
 test_url_endpoint "http://ollama-api.$NAMESPACE.svc.cluster.local:11434" 2>/dev/null || warn "ollama-api endpoint" "Internal service not directly accessible externally"
 test_url_endpoint "http://openwebui.$NAMESPACE.svc.cluster.local:8080" 2>/dev/null || warn "openwebui endpoint" "Internal service not directly accessible externally"
 test_url_endpoint "http://searxng-api.$NAMESPACE.svc.cluster.local:8080" 2>/dev/null || warn "searxng-api endpoint" "Internal service not directly accessible externally"

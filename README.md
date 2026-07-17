@@ -156,8 +156,10 @@ kubectl apply -f clusters/util-server/applications/mcpo/
 # 3. Deploy Ollama
 kubectl apply -f clusters/util-server/applications/ollama/
 
-# 4. Deploy LiteLLM (before OpenWebUI!)
-kubectl apply -f clusters/util-server/applications/litellm/
+# 4. Deploy Bifrost AI Gateway (replaces LiteLLM)
+kubectl apply -f clusters/util-server/applications/bifrost/
+
+# Configure providers via the web UI: https://llm.caehomelab.com → Settings → Providers
 
 # 5. Deploy Open WebUI
 kubectl apply -f clusters/util-server/applications/openwebui/
@@ -231,7 +233,7 @@ kubectl apply -f clusters/util-server/networking/cert-manager/clusterissuer.yaml
 
 4. **Deploy Applications:**
 ```bash
-# Order matters: LiteLLM before OpenWebUI
+# Order matters: Bifrost before OpenWebUI
 # SearXNG - Search engine
 kubectl apply -f clusters/util-server/applications/searxng/
 
@@ -241,11 +243,8 @@ kubectl apply -f clusters/util-server/applications/mcpo/
 # Ollama - Local LLM runtime
 kubectl apply -f clusters/util-server/applications/ollama/
 
-# LiteLLM - Unified LLM proxy
-kubectl apply -f clusters/util-server/applications/litellm/
-
-# IMPORTANT: Update LiteLLM with your API keys before deploying OpenWebUI
-# Edit the secrets in: clusters/util-server/applications/litellm/kustomization.yaml
+kubectl apply -f clusters/util-server/applications/bifrost/
+# Bifrost API Key in `clusters/util-server/applications/bifrost/kustomization.yaml`
 # Then apply:
 kubectl apply -f clusters/util-server/applications/openwebui/
 ```
@@ -290,24 +289,25 @@ kubectl get events -n ai
 
 ## Configuration Files
 
-### Update LiteLLM API Keys
+### Bifrost API Key
 
-Edit `clusters/util-server/applications/litellm/kustomization.yaml` and update:
+Set or rotate the API key in `clusters/util-server/applications/bifrost/kustomization.yaml`:
 
 ```yaml
 stringData:
-  LITELLM_SECRET_KEY: "sk-litellm-secret-key-your-secure-key"
-  LITELLM_MASTER_KEY: "sk-litellm-master-key-your-secure-key"
-  OSK_OPENROUTER_API_KEY: "osk-your-openrouter-api-key"
+  BIFROST_API_KEY: "sk-your-secure-api-key"
 ```
 
-### Update OpenWebUI to Use LiteLLM
+**Provider configuration**: Visit https://llm.caehomelab.com → Settings → Providers to add your provider API keys (Ollama, OpenRouter, etc.)
 
-After LiteLLM is deployed, update OpenWebUI's environment variable:
+### Update OpenWebUI Gateway to Bifrost
+
+After Bifrost is deployed, the `bifrost-config.yaml` ConfigMap points OpenWebUI to:
 ```yaml
 env:
   - name: OLLAMA_BASE_URL
-    value: "http://litellm-api.ai.svc.cluster.local:4000/v1"
+  - name: OLLAMA_BASE_URL
+    value: "http://bifrost-api.ai.svc.cluster.local:8080/v1"
 ```
 
 ---
@@ -317,7 +317,7 @@ env:
 | Application | Public URL | Internal URL | Notes |
 |-------------|------------|--------------|-------|
 | **Open WebUI** | https://ai.caehomelab.com | http://openwebui:8080 | Main LLM UI |
-| **LiteLLM** | https://llm.caehomelab.com | http://litellm-api:4000 | Unified LLM proxy |
+| **Bifrost** | https://llm.caehomelab.com | http://bifrost-api:8080 | AI gateway (web UI config) |
 | **SearXNG** | https://search.caehomelab.com | http://searxng-api:8080 | Search engine |
 | **MCPO** | ClusterIP only | http://mcpo:8000 | MCP Server (no ingress) |
 | **Ollama** | ClusterIP only | http://ollama-api:11434 | Local LLM (no ingress) |
@@ -369,7 +369,7 @@ flux get reconciliations -n ai
 | Application | Namespace | Type | Port | Description |
 |-------------|-----------|------|------|-------------|
 | **Open WebUI** | ai | Ingress | 443 | LLM Interface WebUI with MCP support |
-| **LiteLLM** | ai | Ingress | 4000 | Unified LLM proxy (Ollama + OpenRouter) |
+| **Bifrost** | ai | Ingress | 8080 | AI gateway (web UI config) |
 | **MCPO** | ai | ClusterIP | 8000 | Model Context Protocol Server |
 | **Ollama** | ai | ClusterIP | 11434 | Local LLM runtime |
 | **SearXNG** | ai | Ingress | 443 | Search engine |
@@ -416,7 +416,7 @@ flux get reconciliations -n ai
    │             │             │
    ▼             ▼             ▼
 ┌────────┐  ┌──────────┐  ┌───────┐
-│Open    │  │ SearXNG  │  │ LiteLL│
+│Open    │  │ SearXNG  │  │ BIFRS │
 │ WebUI  │  │          │  │  M    │
 │        │  │          │  │       │
 └───┬────┘  └────┬─────┘  └───┬───┘
@@ -442,7 +442,7 @@ flux get reconciliations -n ai
 - **Kubernetes k3s:** https://k3s.io
 - **Traefik Ingress:** https://traefik.io
 - **cert-manager:** https://cert-manager.io
-- **LiteLLM:** https://github.com/BerriAI/litellm
+- **Bifrost:** https://github.com/maximhq/bifrost
 
 ---
 
@@ -551,7 +551,7 @@ MIT
 
 | Service | URL | Status | Notes |
 |---------|-----|--------|-------|
-| **LiteLLM** | https://llm.caehomelab.com | ✅ Running | Swagger UI accessible, proxy service running |
+| **Bifrost** | https://llm.caehomelab.com | ✅ Ready | Configure providers via web UI after deploy
 | **OpenWebUI** | https://ai.caehomelab.com | ✅ Running | Web UI accessible with websockets/SSL working |
 | **SearXNG** | https://search.caehomelab.com | ✅ Running | Search engine working |
 | **cert-manager** | - | ✅ Ready | All 4 certificates issued (letsencrypt-prod) |
@@ -589,7 +589,7 @@ done
 ```
 
 ### 📦 Certificates (All Issued by Let's Encrypt)
-- `llm.caehomelab.com` → `litellm-tls` ✅
+- `llm.caehomelab.com` → `bifrost-tls` ✅
 - `ai.caehomelab.com` → `openwebui-tls` ✅
 - `search.caehomelab.com` → `searxng-tls` ✅
 - `secrets.caehomelab.com` → `infisical-ssl-certs` ✅ (ready, but Infisical needs to be running)
@@ -608,4 +608,5 @@ All A records for caehomelab.com domains point to **192.168.30.217** (Traefik Lo
 - **Traefik addon in k3s**: Uses `ingressClassName: traefik` (NOT `traefik-v2`)
 - **SearXNG bot detection**: Had to disable `limiter` and `bot_detection` to avoid X-Forwarded-For requirements
 - **OpenWebUI**: Must set `HF_HUB_OFFLINE=1` to avoid infinite HuggingFace sync
-- **LiteLLM**: Running as single pod proxy for AI model routing
+- **OpenWebUI**: Must set `HF_HUB_OFFLINE=1` to avoid infinite HuggingFace sync
+- **Bifrost**: Deploy via `./deploy-bifrost.sh`, then configure providers at https://llm.caehomelab.com

@@ -3,12 +3,13 @@
 # Run from the repository root: ./scripts/deploy-all.sh
 #
 # This script deploys all applications in the correct order:
-# 1. litellm - API proxy layer
-# 2. litellm-config - Configuration for Open WebUI
-# 3. openwebui - Main AI interface (connects to external ollama on aiserver.home)
-# 4. infisical - Secrets management
-# 5. searxng - Search engine
-# 6. grafana - Monitoring dashboard
+# 1. bifrost    - AI gateway (replaces LiteLLM; configure providers via web UI)
+#                Ollama model syntax:        ollama/chat/llama3
+#                OpenRouter model syntax:     openrouter/meta-llama/llama-3-70b-instruct
+# 2. openwebui  - Main AI interface (connects to bifrost-api on :8080)
+# 3. infisical  - Secrets management
+# 4. searxng    - Search engine
+# 5. grafana    - Monitoring dashboard
 #
 # Note: MCPo is not deployed (no published Docker images yet)
 # Note: Ollama runs on separate server aiserver.home, not in Kubernetes
@@ -20,18 +21,20 @@ NAMESPACE="ai"
 
 echo "=============================================="
 echo "Deploying all applications to namespace: $NAMESPACE"
+echo "Bifrost AI gateway: llm.caehomelab.com (port 8080)"
 echo "Ollama external host: aiserver.home:11434"
 echo "=============================================="
 
-# Step 1: Deploy LiteLLM
+# Step 1: Deploy Bifrost AI Gateway (replaces LiteLLM)
 echo ""
-echo ">>> Step 1: Deploying LiteLLM..."
-$SCRIPT_DIR/deploy-litellm.sh
+echo ">>> Step 1: Deploying Bifrost AI Gateway..."
+$SCRIPT_DIR/deploy-bifrost.sh
 
-# Step 2: Deploy LiteLLM config
+# Step 2: Update OpenWebUI config for Bifrost endpoint
 echo ""
-echo ">>> Step 2: Deploying LiteLLM config map..."
-$SCRIPT_DIR/deploy-litellm-config.sh
+echo ">>> Step 2: Updating OpenWebUI LLM gateway endpoint..."
+kubectl apply --namespace="$NAMESPACE" \
+  -f "$SCRIPT_DIR/../clusters/util-server/applications/openwebui/bifrost-config.yaml"
 
 # Step 3: Deploy OpenWebUI
 echo ""
@@ -60,6 +63,7 @@ echo "=============================================="
 echo ""
 echo "Access URLs:"
 echo "  OpenWebUI:   https://ai.caehomelab.com"
+echo "  Bifrost API: https://llm.caehomelab.com  (configure providers via web UI)"
 echo "  Infisical:   https://infisical.caehomelab.com"
 echo "  Grafana:     https://grafana.caehomelab.com"
 echo ""
