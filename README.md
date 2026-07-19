@@ -191,7 +191,6 @@ names/addresses/IPs.
 | `caehomelab.com` | The public DNS domain | every `Ingress` host, `infisical/ssl-certs.yaml`, `infisical-secrets-sync.yaml` (`hostAPI`), deploy scripts |
 | `ai. / llm. / search. / secrets. / grafana.` subdomains | Public service hostnames | each app's `kustomization.yaml` + `_values/values.yaml` |
 | `192.168.30.217` | k3s node / Traefik LoadBalancer IP (LAN) | `README.md`, DNS records |
-| `192.168.30.230` / `192.168.30.230-240` | MetalLB / Traefik `loadBalancerIP` + pool | `networking/metallb/config.yaml`, `networking/traefik/values.yaml`, `flux/helm-releases.yaml` |
 | `192.168.30.121` | NFS server IP | `storage/nfs/deployment.yaml`, `storage/nfs/nfs-subdir-external-provisioner-values.yaml` |
 | `/data/pod_data` | NFS export path | `storage/nfs/` |
 | `aiserver.home` | External host running InfluxDB + Ollama | `grafana/kustomization.yaml` (datasource), `openwebui/_values/values.yaml` (`OLLAMA_BASE_URL`), `scripts/monitor_k3s_health.sh` |

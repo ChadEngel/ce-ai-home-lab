@@ -262,8 +262,9 @@ Persistent volumes (all on NFS, `nfs-client` StorageClass):
    kubectl apply -f clusters/util-server/namespaces/ai.yaml
    # NFS provisioner: applied from repo manifests (no helm needed)
    kubectl apply -k clusters/util-server/storage/nfs/
-   helm install traefik traefik/traefik -f networking/traefik/values.yaml
-   helm install cert-manager jetstack/cert-manager -f networking/cert-manager/values.yaml --set installCRDs=true
+   # Traefik ships with k3s (ServiceLB binds it to the node IP .217) — no install needed.
+   helm install cert-manager jetstack/cert-manager -f clusters/util-server/networking/cert-manager/values.yaml --set installCRDs=true
+   kubectl apply -f clusters/util-server/networking/cert-manager/clusterissuer.yaml
    ```
 
 2. **Deploy Infisical + the operator first** (it syncs the secrets the other

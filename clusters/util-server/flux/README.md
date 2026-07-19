@@ -62,10 +62,8 @@ kubectl wait --namespace=flux-system \
 
 FluxCD tracks these Helm repositories:
 
-- **traefik**: https://traefik.github.io/charts
 - **cert-manager**: https://charts.jetstack.io
 - **nfs-client**: https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner
-- **metallb**: https://metallb.github.io/metallb
 
 ### Application Configuration
 

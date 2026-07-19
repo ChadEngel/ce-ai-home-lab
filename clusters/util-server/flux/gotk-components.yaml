@@ -35,17 +35,6 @@ spec:
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
-  name: traefik
-  namespace: flux-system
-spec:
-  interval: 1h
-  url: https://traefik.github.io/charts
-  timeout: 3m
-  provider: helm
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
   name: cert-manager
   namespace: flux-system
 spec:
@@ -62,17 +51,6 @@ metadata:
 spec:
   interval: 1h
   url: https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner
-  timeout: 3m
-  provider: helm
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: metallb
-  namespace: flux-system
-spec:
-  interval: 1h
-  url: https://metallb.github.io/metallb
   timeout: 3m
   provider: helm
 ---
