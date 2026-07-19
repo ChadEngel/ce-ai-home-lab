@@ -3,6 +3,38 @@
 Kubernetes infrastructure and applications for the home lab, managed as
 GitOps-friendly manifests on a single-node k3s cluster.
 
+## Overview
+
+This repo turns a single Linux box into a self-hosted AI workspace. Once
+applied, you get a private, browser-based ChatGPT-style assistant that can
+route prompts to local models (Ollama) and cloud providers through a single
+gateway, plus the supporting infrastructure to run it securely and observe
+it — all on your own hardware, behind your own TLS-terminated domain.
+
+**What it can do:**
+
+- **Chat with any LLM** through [Open WebUI](https://github.com/open-webui/open-webui)
+  at `ai.caehomelab.com` — one UI for local Ollama models and cloud models,
+  unified through the [Bifrost](https://github.com/maximhq/bifrost) AI
+  gateway at `llm.caehomelab.com` (OpenAI-compatible, so anything that speaks
+  the OpenAI API can plug in).
+- **Search privately** with [SearXNG](https://searxng.org) at
+  `search.caehomelab.com` — a self-hosted metasearch engine with no tracking.
+- **Manage secrets centrally** with [Infisical](https://infisical.com) at
+  `secrets.caehomelab.com` — an operator syncs secrets from Infisical into
+  Kubernetes automatically, so the cluster pulls real credentials at runtime
+  instead of storing them in git.
+- **Auto-issue TLS** for every endpoint with cert-manager + Let's Encrypt
+  (DNS-01 via Cloudflare) — five public HTTPS services, no manual certs.
+- **Persist data** on an NFS share (NFS-subdir provisioner) so PVCs survive
+  node restarts.
+- **Monitor the cluster** with Grafana dashboards fed by cluster-health
+  metrics pushed to InfluxDB v2.
+
+Everything is declarative YAML under `clusters/util-server/` and applied with
+`kubectl` — no Helm releases to maintain, no click-ops. Fork it, change the
+domain/IPs/secrets coordinates to your own, and `kubectl apply`.
+
 ## Technology stack
 
 - **Kubernetes**: k3s v1.35.5+k3s1
