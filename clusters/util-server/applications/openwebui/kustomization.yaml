@@ -1,12 +1,19 @@
 # Open WebUI — main LLM chat UI.
 #
-# Connection target (live): Bifrost AI gateway
-#   OLLAMA_BASE_URL=http://bifrost-api.ai.svc.cluster.local:8080/v1
-#   OPENAI_API_KEY=placeholder  (enables OpenAI-compatible mode; Bifrost is keyless)
+# Connection target (live): Bifrost AI gateway (OpenAI-compatible)
+#   OPENAI_API_BASE_URL=http://bifrost-api.ai.svc.cluster.local:8080/v1
+#   OPENAI_API_KEY=bifrost-placeholder  (non-empty value ENABLES Open WebUI's
+#     OpenAI connection; the value is irrelevant since Bifrost is keyless)
 #
-# To switch to direct external Ollama (bypassing Bifrost), change
-# OLLAMA_BASE_URL to e.g. http://aiserver.home:11434 and remove the
-# OPENAI_API_KEY entry.
+# IMPORTANT: Bifrost speaks the OpenAI API (/v1/models, /v1/chat/completions),
+# NOT the Ollama API (/api/tags). So Open WebUI MUST reach it via the OpenAI
+# connection (OPENAI_API_BASE_URL), not via OLLAMA_BASE_URL. Pointing
+# OLLAMA_BASE_URL at Bifrost yields an empty model list because Open WebUI
+# then calls /api/tags, which Bifrost does not implement.
+#
+# To switch to direct external Ollama (bypassing Bifrost), set
+#   OLLAMA_BASE_URL=http://aiserver.home:11434
+# and remove the OPENAI_API_BASE_URL / OPENAI_API_KEY entries.
 #
 # See clusters/util-server/applications/openwebui/bifrost-config.yaml for
 # the leftover ConfigMap from the LiteLLM era — it is NOT referenced by
@@ -101,12 +108,12 @@ spec:
           env:
             - name: WEBUI_NAME
               value: "Open WebUI"
-            - name: DEFAULT_MODELS
-              value: "ollama/local-host"
-            # Point at Bifrost AI gateway for OpenAI-compatible LLM calls
-            - name: OLLAMA_BASE_URL
+            # Bifrost is an OpenAI-compatible gateway, so Open WebUI must use
+            # the OpenAI connection — NOT OLLAMA_BASE_URL (Bifrost has no /api/tags).
+            - name: OPENAI_API_BASE_URL
               value: "http://bifrost-api.ai.svc.cluster.local:8080/v1"
-            # Placeholder key to ENABLE OpenWebUI's OpenAI mode (required flag—value doesn't matter since Bifrost is keyless)
+            # Non-empty key ENABLES Open WebUI's OpenAI mode (value is a dummy —
+            # Bifrost is keyless). Without this, OPENAI_API_BASE_URL is ignored.
             - name: OPENAI_API_KEY
               value: "bifrost-placeholder"
             # RAG settings to avoid slow embedding downloads on cold start

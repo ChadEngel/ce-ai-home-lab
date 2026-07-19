@@ -1,5 +1,12 @@
 ## Open WebUI configuration
 ## https://github.com/open-webui/open-webui
+##
+## REFERENCE VALUES — the canonical deployment is the kustomization.yaml in
+## this directory (which connects to Bifrost via the OpenAI connection:
+## OPENAI_API_BASE_URL + OPENAI_API_KEY). The values below describe the
+## ALTERNATIVE "direct Ollama" wiring (OLLAMA_BASE_URL -> aiserver.home),
+## kept for reference. Note: Bifrost is OpenAI-compatible only — do NOT point
+## OLLAMA_BASE_URL at it (it has no /api/tags endpoint).
 
 image:
   repository: ghcr.io/open-webui/open-webui
