@@ -115,10 +115,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 512Mi
+              memory: 1Gi
             limits:
               cpu: "1"
-              memory: 2Gi
+              memory: 3Gi
           livenessProbe:
             httpGet:
               path: /
@@ -248,10 +248,10 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 128Mi
+              memory: 256Mi
             limits:
-              cpu: 250m
-              memory: 512Mi
+              cpu: 500m
+              memory: 1Gi
           ports:
             - containerPort: 5432
               name: postgres
@@ -335,11 +335,11 @@ spec:
               name: redis
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 25m
+              memory: 32Mi
             limits:
-              cpu: 200m
-              memory: 256Mi
+              cpu: 100m
+              memory: 128Mi
           volumeMounts:
             - name: infisical-redis-data
               mountPath: /data

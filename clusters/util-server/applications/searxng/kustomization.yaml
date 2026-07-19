@@ -88,10 +88,10 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 128Mi
+              memory: 192Mi
             limits:
               cpu: 250m
-              memory: 256Mi
+              memory: 512Mi
           # The image (SearXNG 2026.6.24+) no longer ships a /healthcheck
           # endpoint — the liveness probe was failing with 404, which made
           # Kubernetes kill the pod every minute. Readiness on / is enough.

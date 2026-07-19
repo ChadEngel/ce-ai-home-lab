@@ -16,12 +16,50 @@ The architecture leverages **NFS storage**, **TLS certificates**, **Ingress rout
 
 ### Minimum Hardware
 
-| Resource | Minimum | Recommended |
-|-----------|----------|-------------|
-| **CPU** | 4 cores | 8+ cores |
-| **RAM** | 8 GB | 16+ GB |
-| **Disk** | 48 GB | 100+ GB NVMe SSD |
-| **Network** | 1 GbE | 2.5 GbE+ |
+Sized from measured steady-state usage (`kubectl top`) plus headroom for bursts.
+A single node runs **all** workloads below.
+
+| Resource | Minimum | Recommended | Notes |
+|----------|---------|-------------|-------|
+| **CPU** | 4 cores | 8 cores | Pod *requests* total ~0.7 core; *limits* ~4 cores. 2 cores boots but chokes during Infisical/Open WebUI startup + RAG embeddings. |
+| **RAM** | 8 GB | **16 GB** | Pod *requests* total ~3.0 GiB; *limits* ~9.2 GiB (overcommitted). 8 GB runs but Infisical (~0.9 GiB) + Open WebUI (~0.7 GiB, spikes higher on embeddings/STT) leave little room. 16 GB removes memory pressure. |
+| **Disk (local)** | 48 GB | 100 GB SSD | k3s + etcd + container images (~15 GB). Persistent volumes live on NFS, not here. |
+| **Network** | 1 GbE | 2.5 GbE+ | LLM traffic is the bandwidth driver. |
+
+> **Why 16 GB RAM is recommended over the 8 GB minimum:** Open WebUI and
+> Infisical are the two memory-hungry workloads. Their *limits* are 3 GiB each
+> so they can burst during embedding generation / Node.js GC. On 8 GB the sum
+> of memory *limits* (~9.2 GiB) exceeds physical RAM, so two simultaneous
+> bursts can trigger the kernel OOM-killer. 16 GB makes that a non-issue.
+
+#### Per-pod resource budget (requests / limits)
+
+These are the values committed in the manifests (`applications/*/kustomization.yaml`).
+Requests = guaranteed/reserved; limits = burst ceiling.
+
+| Pod | CPU req | CPU lim | Mem req | Mem lim | Steady-state usage |
+|-----|---------|---------|---------|---------|--------------------|
+| openwebui | 200m | 1 | 1 GiB | 3 GiB | ~10m / ~700 MiB (spikes on RAG) |
+| infisical | 100m | 1 | 1 GiB | 3 GiB | ~25m / ~760 MiB |
+| infisical-db (Postgres) | 50m | 500m | 256 MiB | 1 GiB | ~10m / ~70 MiB |
+| infisical-redis | 25m | 100m | 32 MiB | 128 MiB | ~15m / ~8 MiB |
+| bifrost | 25m | 500m | 128 MiB | 512 MiB | ~1m / ~55 MiB (bursts on streaming) |
+| grafana | 50m | 250m | 128 MiB | 512 MiB | ~25m / ~125 MiB |
+| searxng | 50m | 250m | 192 MiB | 512 MiB | ~1m / ~110 MiB |
+| nfs-provisioner | 10m | 100m | 16 MiB | 64 MiB | ~2m / ~6 MiB |
+| **App subtotal** | **510m** | **3.7** | **~2.7 GiB** | **~8.2 GiB** | |
+
+System pods (k3s / Traefik / coredns / metrics-server / cert-manager /
+Infisical operator) add roughly **~0.2 core / ~0.2 GiB** of requests on top.
+
+**Total requests: ~0.7 core CPU, ~3.0 GiB RAM. Total limits: ~4.2 core CPU, ~9.2 GiB RAM.**
+
+To re-measure on your own node:
+```bash
+kubectl top nodes
+kubectl top pods -A
+kubectl describe node <node> | sed -n '/Allocated resources:/,/Events:/p'
+```
 
 ### Network Requirements
 
@@ -41,9 +79,21 @@ The architecture leverages **NFS storage**, **TLS certificates**, **Ingress rout
 
 | Component | Storage | Notes |
 |-----------|---------|-------|
-| **Root filesystem** | 48+ GB | For system + container images |
+| **Root filesystem** | 48+ GB | For system + container images (images ~15 GB) |
 | **NFS Server** | 100+ GB | For persistent volumes |
-| **NFS Share Path** | `/data/pod_data` | Mounted on k3s node |
+| **NFS Share Path** | `/data/pod_data` | Mounted/exported to k3s node |
+
+Persistent volumes (all on NFS, `nfs-client` StorageClass):
+
+| PVC | Size | Used by |
+|-----|------|---------|
+| openwebui-pvc | 5 GiB | Open WebUI DB + uploads |
+| bifrost-pvc | 5 GiB | Bifrost config DB |
+| grafana-pvc | 5 GiB | Grafana DB + dashboards |
+| searxng-pvc | 2 GiB | SearXNG config |
+| infisical-data | 5 GiB | Infisical attachments |
+| infisical-db-data | 10 GiB | Infisical Postgres |
+| **Total** | **32 GiB** | (NFS; not counted against local disk) |
 
 ---
 
@@ -213,7 +263,7 @@ The architecture leverages **NFS storage**, **TLS certificates**, **Ingress rout
 ### Pre-Deployment Tasks
 
 1. **[ ] Provision Ubuntu 26.04 LTS VM/server**
-   - Minimum 4 cores, 8GB RAM, 48GB disk
+   - Minimum 4 cores / 8 GB RAM / 48 GB disk (**16 GB RAM recommended** — see Minimum Hardware above)
    - Install k3s with `curl -sfL https://get.k3s.io | sh -`
 
 2. **[ ] Configure NFS storage**

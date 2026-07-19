@@ -43,9 +43,10 @@ spec:
           resources:
             requests:
               cpu: 10m
-              memory: 128Mi
+              memory: 16Mi
             limits:
-              memory: 256Mi
+              cpu: 100m
+              memory: 64Mi
           volumeMounts:
             - name: nfs-subdir-external-provisioner-root
               mountPath: /persistentvolumes
