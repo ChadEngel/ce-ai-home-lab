@@ -69,9 +69,12 @@ same Traefik IP, so internal and external clients get the same answer.
 .
 ├── README.md
 ├── PREREQUISITES.md
-├── homelab_build.md
-├── DEPLOYMENT_STATUS.md
-├── MONITORING.md
+├── SETUP.md                 (physical topology / setup log)
+├── homelab_build.md         (build notes)
+├── DEPLOYMENT_STATUS.md     (current service status)
+├── MONITORING.md            (InfluxDB/Grafana metrics setup)
+├── persistant_nfs_mount.md  (NFS export + node mount steps)
+├── .gitignore               (excludes backups/ and local secrets)
 ├── docs/
 ├── clusters/
 │   └── util-server/
@@ -191,9 +194,9 @@ names/addresses/IPs.
 | `192.168.30.230` / `192.168.30.230-240` | MetalLB / Traefik `loadBalancerIP` + pool | `networking/metallb/config.yaml`, `networking/traefik/values.yaml`, `flux/helm-releases.yaml` |
 | `192.168.30.121` | NFS server IP | `storage/nfs/deployment.yaml`, `storage/nfs/nfs-subdir-external-provisioner-values.yaml` |
 | `/data/pod_data` | NFS export path | `storage/nfs/` |
-| `aiserver.home` | External host running InfluxDB + Ollama | `grafana/kustomization.yaml` (datasource), `openwebui/_values/values.yaml` (`OLLAMA_BASE_URL`), `monitor_k3s_health.sh`, `influx-metrics-cm.yaml` |
+| `aiserver.home` | External host running InfluxDB + Ollama | `grafana/kustomization.yaml` (datasource), `openwebui/_values/values.yaml` (`OLLAMA_BASE_URL`), `scripts/monitor_k3s_health.sh` |
 | `aiserver.home:8086` | InfluxDB v2 endpoint | Grafana datasource, metrics scripts |
-| InfluxDB org `home`, bucket `kube_metrics` | Monitoring bucket | `scripts/monitor_k3s_health.sh`, `influx-metrics-cm.yaml`, Grafana dashboards |
+| InfluxDB org `home`, bucket `kube_metrics` | Monitoring bucket | `scripts/monitor_k3s_health.sh`, Grafana dashboards |
 | `you@example.com` | Let's Encrypt account email | `networking/cert-manager/clusterissuer.yaml` |
 | `ChadEngel/ce-ai-home-lab` | GitHub repo URL (Flux GitRepository) | `clusters/util-server/flux/gitops-secrets.yml`, `flux/apps.yaml` |
 | Infisical org `caehomelab`, project `secret-management`, env `prod` | Infisical coordinates | `applications/infisical-operator/`, scripts/infisical-agent*.sh |
