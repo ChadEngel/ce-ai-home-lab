@@ -1,5 +1,18 @@
 ## NFS Subdir External Provisioner configuration
 ## https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner
+##
+## NOTE: This values file is for reference only. The cluster is NOT managed
+## via the Helm release anymore (the original `nfs-storage` Helm release was
+## replaced by a raw manifest, and `helm` is not installed on the nodes).
+## The canonical, applied-from-this-repo manifests live alongside this file:
+##
+##     kustomization.yaml  serviceaccount.yaml  rbac.yaml
+##     storageclass.yaml   deployment.yaml
+##
+## Apply with:  kubectl apply -k clusters/util-server/storage/nfs/
+##
+## The values below are kept in sync with those manifests so anyone who
+## prefers the Helm chart can reproduce the same configuration.
 
 nfs:
   server: 192.168.30.121
@@ -20,20 +33,15 @@ storageClass:
     archiveOnEmpty: "false"
 
 provisioner:
-  name: k8s-sigs.io/nfs-subdir-external-provisioner
-  replicas: 2
-  affinity:
-    podAntiAffinity:
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - podAffinityTerm:
-            labelSelector:
-              matchExpressions:
-                - key: app.kubernetes.io/name
-                  operator: In
-                  values:
-                    - nfs-client-provisioner
-            topologyKey: topology.kubernetes.io/zone
-          weight: 100
+  # Must match the StorageClass `provisioner:` field and the deployment's
+  # PROVISIONER_NAME env. Originally `k8s-sigs.io/nfs-subdir-external-provisioner`;
+  # the live cluster uses the `cluster.local/...` name.
+  name: cluster.local/nfs-storage-nfs-subdir-external-provisioner
+  replicas: 1
+  # Single replica on a single-node cluster => leader election is pointless
+  # and only introduces a restart-on-apiserver-latency failure mode. Disabled.
+  leaderElection:
+    enabled: false
 
 persistence:
   enabled: true

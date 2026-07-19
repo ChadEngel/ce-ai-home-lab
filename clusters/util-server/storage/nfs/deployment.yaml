@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-storage-nfs-subdir-external-provisioner
+  namespace: ai
+  labels:
+    app: nfs-subdir-external-provisioner
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nfs-subdir-external-provisioner
+  template:
+    metadata:
+      labels:
+        app: nfs-subdir-external-provisioner
+    spec:
+      serviceAccountName: nfs-storage-nfs-subdir-external-provisioner
+      containers:
+        - name: nfs-subdir-external-provisioner
+          image: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROVISIONER_NAME
+              value: cluster.local/nfs-storage-nfs-subdir-external-provisioner
+            - name: NFS_SERVER
+              value: 192.168.30.121
+            - name: NFS_PATH
+              value: /data/pod_data
+            # Leader election is intentionally DISABLED. This deployment runs a
+            # single replica on a single-node k3s cluster, so there is no other
+            # replica to contend with for leadership. With leader election
+            # enabled (the upstream default), any transient kube-apiserver
+            # latency on this shared node causes the lease-renewal PUT to
+            # 10.43.0.1:443 to exceed its ~10s deadline, the provisioner logs
+            # "leaderelection lost" (exit 255), and the pod restarts. That loop
+            # produced 115 restarts in 21 days. Disabling it removes the failure
+            # mode entirely with no downside at replicas=1.
+            - name: ENABLE_LEADER_ELECTION
+              value: "false"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: nfs-subdir-external-provisioner-root
+              mountPath: /persistentvolumes
+      volumes:
+        - name: nfs-subdir-external-provisioner-root
+          nfs:
+            server: 192.168.30.121
+            path: /data/pod_data

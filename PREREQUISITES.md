@@ -265,7 +265,8 @@ The architecture leverages **NFS storage**, **TLS certificates**, **Ingress rout
 1. **Deploy infrastructure components first:**
    ```bash
    kubectl apply -f clusters/util-server/namespaces/ai.yaml
-   helm install nfs-storage nfs-client/nfs-subdir-external-provisioner -f storage/nfs/...
+   # NFS provisioner: applied from repo manifests (no helm needed)
+   kubectl apply -k clusters/util-server/storage/nfs/
    helm install traefik traefik/traefik -f networking/traefik/values.yaml
    helm install cert-manager jetstack/cert-manager -f networking/cert-manager/values.yaml --set installCRDs=true
    ```
