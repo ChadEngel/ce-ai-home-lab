@@ -109,17 +109,38 @@ infs() {
     secrets) shift; infisical secrets --domain "$INFISICAL_DOMAIN" --projectId "$INFISICAL_PROJECT_ID" \
                 --env "$INFISICAL_ENV" --path "$INFISICAL_PATH" "$@" ;;
     get)  local k="${2:-}"; [ -n "$k" ] || { echo "usage: infs get <KEY>" >&2; return 2; }
-          infisical_api GET "/v3/secrets/raw?workspaceId=$INFISICAL_PROJECT_ID&environment=$INFISICAL_ENV&secretPath=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote('$INFISICAL_PATH'))")&include_imports=false" \
+          local _p; _p=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$INFISICAL_PATH'))")
+          infisical_api GET "/v3/secrets/raw?workspaceId=$INFISICAL_PROJECT_ID&environment=$INFISICAL_ENV&secretPath=$_p&include_imports=false" \
             | python3 -c "import sys,json; d=json.load(sys.stdin).get('secrets',[]); \
-            [print(x['secretValue']) for x in d if x['secretKey']=='$k'] or (print('',end='') or sys.stderr.write('not found: $k\n'))" ;;
+            m=[x for x in d if x['secretKey']=='$k']; \
+            print(m[0]['secretValue']) if m else (sys.stderr.write('not found: $k\n'), sys.exit(1))" ;;
     set)  local kv="${2:-}"; [ -n "$kv" ] || { echo "usage: infs set <KEY>=<VALUE>" >&2; return 2; }
           infisical secrets set --silent --domain "$INFISICAL_DOMAIN" --token "$INFISICAL_TOKEN" \
             --projectId "$INFISICAL_PROJECT_ID" --env "$INFISICAL_ENV" --path "$INFISICAL_PATH" "$kv" ;;
     del)  local k="${2:-}"; [ -n "$k" ] || { echo "usage: infs del <KEY>" >&2; return 2; }
           infisical secrets delete --silent --domain "$INFISICAL_DOMAIN" --token "$INFISICAL_TOKEN" \
             --projectId "$INFISICAL_PROJECT_ID" --env "$INFISICAL_ENV" --path "$INFISICAL_PATH" --type shared "$k" ;;
+    ssh-key)  # Materialize the agent's SSH private key from Infisical.
+              #   infs ssh-key [path]   # default ~/.ssh/homelab-agent-util-server
+              # The canonical key lives in Infisical secret UTIL_SERVER_SSH_PRIVATE_KEY
+              # (base64). This fetches, decodes, and writes it (0600). Re-run after a
+              # rotation or on a fresh host. Authorize the matching public key on the
+              # target server's ~/.ssh/authorized_keys.
+              local out="${2:-$HOME/.ssh/homelab-agent-util-server}"
+              local b64
+              b64="$(infs get UTIL_SERVER_SSH_PRIVATE_KEY)" || {
+                echo "infs ssh-key: could not fetch UTIL_SERVER_SSH_PRIVATE_KEY from Infisical" >&2; return 1; }
+              [ -n "$(printf '%s' "$b64" | tr -d ' \n')" ] || {
+                echo "infs ssh-key: UTIL_SERVER_SSH_PRIVATE_KEY is empty" >&2; return 1; }
+              mkdir -p "$(dirname "$out")"
+              printf '%s' "$b64" | base64 -d > "$out"
+              chmod 600 "$out"
+              if ssh-keygen -l -f "$out" >/dev/null 2>&1; then
+                echo "infs ssh-key: wrote $out (0600) — $(ssh-keygen -l -f "$out" 2>&1)" >&2
+              else
+                echo "infs ssh-key: WARNING — $out is not a valid key" >&2; return 1; fi ;;
     api)  shift; infisical_api "$@" ;;
-    *)    echo "usage: infs {secrets|get|set|del|api} ..." >&2; return 2 ;;
+    *)    echo "usage: infs {secrets|get|set|del|ssh-key|api} ..." >&2; return 2 ;;
   esac
 }
 
