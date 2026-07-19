@@ -18,6 +18,16 @@
 #   OLLAMA_BASE_URL=http://aiserver.home:11434
 # and remove the OPENAI_API_BASE_URL / OPENAI_API_KEY entries.
 #
+# CAVEAT — admin Connections UI overrides env vars:
+# Open WebUI persists the OpenAI connection (api_base_urls, api_keys,
+# api_configs) in its DB (config table, id=1, key "openai") the first time an
+# admin saves Settings -> Connections, and that DB config TAKES PRECEDENCE over
+# these env vars. For Infisical to remain the single source of truth for the
+# URL/key, the DB "openai" entry must be kept as {"enable": true} ONLY (no
+# api_base_urls / api_keys / api_configs). If the UI starts showing no models,
+# reset it: in the pod, set config.openai back to {"enable": true} and restart.
+# (api_configs["0"].enable=false or a typo'd URL here are the usual culprits.)
+#
 # See clusters/util-server/applications/openwebui/bifrost-config.yaml for
 # the leftover ConfigMap from the LiteLLM era — it is NOT referenced by
 # this Deployment and can be deleted (kubectl delete cm -n ai openwebui-bifrost-config).
