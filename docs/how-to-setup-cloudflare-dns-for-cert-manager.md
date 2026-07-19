@@ -243,18 +243,19 @@ For your internal services (UDM Pro DNS or external):
 
 | Subdomain | Type | Value | TTL | Purpose |
 |-----------|------|-------|-----|---------|
-| `*.caehomelab.com` | A | `192.168.30.230` | Automatic | All services |
-| `ai.caehomelab.com` | A | `192.168.30.230` | 300 | OpenWebUI |
-| `llm.caehomelab.com` | A | `192.168.30.230` | 300 | LiteLLM |
-| `search.caehomelab.com` | A | `192.168.30.230` | 300 | SearXNG |
-| `secrets.caehomelab.com` | A | `192.168.30.230` | 300 | Infisical |
+| `*.caehomelab.com` | A | `192.168.30.217` | Automatic | All services |
+| `ai.caehomelab.com` | A | `192.168.30.217` | 300 | OpenWebUI |
+| `llm.caehomelab.com` | A | `192.168.30.217` | 300 | Bifrost |
+| `search.caehomelab.com` | A | `192.168.30.217` | 300 | SearXNG |
+| `secrets.caehomelab.com` | A | `192.168.30.217` | 300 | Infisical |
+| `grafana.caehomelab.com` | A | `192.168.30.217` | 300 | Grafana |
 
 ### DNS in Cloudflare Dashboard
 
 1. Create a zone for `caehomelab.com` in Cloudflare
 2. Add a wildcard A record:
    - **Name**: `*`
-   - **IP**: `192.168.30.230`
+   - **IP**: `192.168.30.217`
    - **Proxy status**: "DNS Only" (proxied through Cloudflare won't work for Let's Encrypt)
 
 ### DNS Proxy Settings
@@ -331,12 +332,13 @@ Under **DNS** → **Records**:
 
 | Type | Name | Content | Proxy | TTL |
 |----|---|---------|-------|-----|
-| A | `@` | `192.168.30.230` | DNS Only | Auto |
-| A | `*` | `192.168.30.230` | DNS Only | Auto |
-| A | `ai` | `192.168.30.230` | DNS Only | Auto |
-| A | `llm` | `192.168.30.230` | DNS Only | Auto |
-| A | `secrests` | `192.168.30.230` | DNS Only | Auto |
-| A | `search` | `192.168.30.230` | DNS Only | Auto |
+| A | `@` | `192.168.30.217` | DNS Only | Auto |
+| A | `*` | `192.168.30.217` | DNS Only | Auto |
+| A | `ai` | `192.168.30.217` | DNS Only | Auto |
+| A | `llm` | `192.168.30.217` | DNS Only | Auto |
+| A | `secrets` | `192.168.30.217` | DNS Only | Auto |
+| A | `search` | `192.168.30.217` | DNS Only | Auto |
+| A | `grafana` | `192.168.30.217` | DNS Only | Auto |
 
 **Important**: Set all DNS records to **DNS Only** (gray cloud) for Let's Encrypt to work!
 

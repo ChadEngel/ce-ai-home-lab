@@ -69,11 +69,12 @@ kubectl describe node <node> | sed -n '/Allocated resources:/,/Events:/p'
   - `443/TCP` - HTTPS traffic (Ingress)
   - `80/TCP` - HTTP (for Let's Encrypt DNS-01 validation)
   - `8443/TCP` - Tailscale
-- **External DNS** configured for:
+- **External DNS** configured for (all → `192.168.30.217`):
   - `ai.caehomelab.com`
   - `llm.caehomelab.com`
   - `secrets.caehomelab.com`
   - `search.caehomelab.com`
+  - `grafana.caehomelab.com`
 
 ### Storage Requirements
 
@@ -128,72 +129,32 @@ Persistent volumes (all on NFS, `nfs-client` StorageClass):
 ## Architecture Overview
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                           INTERNET                                 │
-└──────────────────────┬─────────────────────────────────────────────┘
-                       │
-                 ┌─────▼─────┐
-                 │ DNS-01    │  Let's Encrypt challenge validation
-                 │ validation│  (Public DNS used only for cert issuance)
-                 └─────┬─────┘
-                       │
-           ┌───────────▼──────────────────┐
-           │    Internet DNS              │
-           │    (public domain)           │
-           │    ai.caehomelab.com            │
-           │    llm.caehomelab.com           │
-           │    secrets.caehomelab.com       │
-           │    search.caehomelab.com        │
-           └───────┬──────────────────────┘
-                   │
-                   ▼
-        ┌──────────────────────────────┐
-        │         cert-manager          │
-        │        ClusterIssuer          │
-        │    (DNS-01 challenge)         │
-        └───────┬──────────────────────┘
-                │
-                ▼
-        ┌──────────────────────────────┐
-        │      UDM Pro DNS              │
-        │      192.168.30.121           │
-        │   Internal resolution         │
-        │      to .230                  │
-        └───────┬──────────────────────┘
-                │
-                ▼
-        ┌──────────────────────────────┐
-        │      Traefik Ingress          │
-        │    192.168.30.230             │
-        │   Load Balancer + Router      │
-        └───────┬──────────────────────┘
-                │
-                ├─────────────────────────────────────────────┐
-                │                                              │
-                ▼                                              ▼
-        ┌───────────────┐                          ┌─────────────────┐
-        │ Open WebUI    │                          │ LiteLLM Proxy   │
-        │ 4000-4500     │                          │ 4000-4500       │
-        └──────┬────────┘                          └──────┬──────────┘
-               │                                            │
-               │                                            │
-               ▼                                            ▼
-        ┌───────────────┐                          ┌─────────────────┐
-        │  OpenRouter   │ (via LiteLLM)            │ Open WebUI API  │
-        │  Paid models  │                          │ MCP Servers     │
-        └───────────────┘                          └─────────────────┘
+                          INTERNET
+                             |
+                    Let's Encrypt (DNS-01)
+                             |
+        Public DNS (Cloudflare): *.caehomelab.com -> 192.168.30.217
+                             |
+                cert-manager ClusterIssuer (DNS-01)
+                             |
+             Traefik Ingress :443/:80   (node 192.168.30.217)
+                             |
+   +-------------+-----------+-----------+-------------+
+   v             v           v           v             v
+ Open WebUI    Bifrost    Infisical    SearXNG      Grafana
+ ai.*          llm.*      secrets.*    search.*     grafana.*
+ :8080         :8080      :8080        :8080        :3000
+   |             |
+   |   OpenAI API  (/v1/models, /v1/chat/completions)
+   +---->---------+
+                  v
+        Ollama (external)   aiserver.home:11434
+        Local LLM runtime -- 7 models
 
-        ┌─────────────────────────────────────────────────────────┐
-        │                    Ollama Node                          │
-        │                    11434/OLLAMA                         │
-        │              (Local LLM Runtime)                        │
-        └───────────────────┬─────────────────────────────────────┘
-                            │
-                            │
-                    ┌───────▼────────────┐
-                    │      SearXNG       │
-                    │ Search Engine      │
-                    └────────────────────┘
+ Cross-cutting:
+  - Infisical operator syncs Infisical secrets -> K8s Secrets
+    (bifrost-secrets, openwebui-secrets, cloudflare-dns-creds, influxdb-secrets)
+  - NFS PVs: 192.168.30.121:/data/pod_data  (6 PVCs, 32 GiB)
 ```
 
 ---
@@ -201,59 +162,41 @@ Persistent volumes (all on NFS, `nfs-client` StorageClass):
 ## Network Diagram
 
 ```
-                              ┌──────────────────────┐
-                              │    External DNS      │
-                              │   (Example.com)      │
-                              └──────────────────────┘
-                                         │
-                                         │ DNS-01
-                                         ▼
-                              ┌──────────────────────┐
-                              │   Let's Encrypt CA   │
-                              │ (DNS challenge)      │
-                              └──────────────────────┘
-                                         │
-                    ┌────────────────────┼────────────────────┐
-                    │                    │                    │
-                    ▼                    │                    ▼
-           ┌──────────────┐              │              ┌──────────────┐
-           │   UDM Pro    │              │              │ Tailscale    │
-           │   DNS:       │              │              │ Remote Access│
-           │ .230         │              │              │              │
-           └───────┬──────┘              │              └──────────────┘
-                   │                     │
-                   │                     │
-                   ▼                     │
-           ┌────────────────────────────────────┐
-           │  k3s Control-Plane Node           │
-           │  192.168.30.217                    │
-           │───────────────────────────────────  │
-           │  Traefik Ingress (192.168.30.230)  │
-           └──────────────┬──────────────────────┘
-                          │
-            ┌─────────────┼─────────────┐
-            │             │             │
-            ▼             ▼             ▼
-    ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-    │ Open WebUI  │ │  LiteLLM    │ │  SearXNG    │
-    │  8080       │ │   4000      │ │   8080      │
-    │ ClusterIP   │ │  ClusterIP  │ │  ClusterIP  │
-    └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
-           │               │               │
-           │               │               │
-           ▼               ▼               │
-    ┌─────────────┐ ┌─────────────┐         │
-    │ MCPO        │ │  Ollama     │         │
-    │ 8000        │ │ 11434       │         │
-    │ ClusterIP   │ │ ClusterIP   │         │
-    └──────┬──────┘ └──────┬──────┘         │
-           │               │                 │
-           │               │                 │
-           ▼               ▼                 │
-    ┌─────────────┐ ┌──────────┐        ┌──────────────────┐
-    │ Database    │ │ Models   │        │  Persistent      │
-    │ (optional)  │ │ Storage  │        │  Storage (NFS)   │
-    └─────────────┘ └──────────┘        └──────────────────┘
+                      +------------------+
+                      |  External DNS    |
+                      |  Cloudflare      |
+                      | *.caehomelab.com |
+                      +--------+---------+
+                               | A -> 192.168.30.217
+                               |  + DNS-01 challenge for Let's Encrypt
+                               v
+                      +------------------+
+                      | Let's Encrypt CA |
+                      +--------+---------+
+                               | cert (cert-manager DNS-01)
+                               v
+        +----------------------------------------------+
+        |  k3s single-node cluster -- util-server     |
+        |  192.168.30.217                             |
+        |  +----------------------------------------+ |
+        |  | Traefik Ingress  :443/:80              | |
+        |  +------------------+---------------------+ |
+        |                     |                       |
+        |   +-----------------+---------+             |
+        |   v                 v         v             v
+        | Open WebUI      Bifrost    Infisical     SearXNG   Grafana
+        |  :8080           :8080      :8080         :8080    :3000
+        |   |                |                         |
+        |   | OpenAI /v1     |                         |
+        |   +->(cluster)-----+                         |
+        |                    v                         |
+        |             Ollama (external)                |
+        |             aiserver.home:11434              |
+        |                                              |
+        |  NFS PVs <- 192.168.30.121:/data/pod_data    |
+        +----------------------------------------------+
+
+  Tailscale on the node provides remote access (subnet router).
 ```
 
 ---
@@ -281,10 +224,11 @@ Persistent volumes (all on NFS, `nfs-client` StorageClass):
 4. **[ ] Configure DNS**
    - UDM Pro DNS at `192.168.30.121`
    - Records:
-     - `ai.caehomelab.com` → `192.168.30.230`
-     - `llm.caehomelab.com` → `192.168.30.230`
-     - `secrets.caehomelab.com` → `192.168.30.230`
-     - `search.caehomelab.com` → `192.168.30.230`
+     - `ai.caehomelab.com` → `192.168.30.217`
+     - `llm.caehomelab.com` → `192.168.30.217`
+     - `secrets.caehomelab.com` → `192.168.30.217`
+     - `search.caehomelab.com` → `192.168.30.217`
+     - `grafana.caehomelab.com` → `192.168.30.217`
 
 5. **[ ] Configure Let's Encrypt DNS provider**
    - API token for DNS provider (e.g., Cloudflare, Route53)
@@ -302,9 +246,10 @@ Persistent volumes (all on NFS, `nfs-client` StorageClass):
 8. **[ ] Generate secrets (for local setup)**
    - `JWT_SECRET`: 32-character random string
    - `NEXT_SECRET_KEY_BASE`: 32-character random string
-   - `LITELLM_SECRET_KEY`: 32-character random string
-   - `LITELLM_MASTER_KEY`: 32-character random string
    - Use `openssl rand -hex 32` to generate
+   (These live in Infisical and are synced into the cluster by the Infisical
+   operator — see `applications/infisical-operator/`. No secrets are stored
+   in this repo.)
 
 ---
 
@@ -321,20 +266,25 @@ Persistent volumes (all on NFS, `nfs-client` StorageClass):
    helm install cert-manager jetstack/cert-manager -f networking/cert-manager/values.yaml --set installCRDs=true
    ```
 
-2. **Configure LiteLLM secrets:**
+2. **Deploy Infisical + the operator first** (it syncs the secrets the other
+   apps consume):
    ```bash
-   cd clusters/util-server/applications/litellm
-   # Edit kustomization.yaml with real values before applying
-   kubectl apply -f kustomization.yaml
+   kubectl apply -f clusters/util-server/applications/infisical/kustomization.yaml
+   kubectl apply -f clusters/util-server/applications/infisical-operator/install-secrets-operator.yaml
+   kubectl apply -f clusters/util-server/applications/infisical-operator/infisical-secrets-sync.yaml
    ```
+   Then create these secrets in the Infisical UI (https://secrets.caehomelab.com):
+   `BIFROST_OLLAMA_KEY`, `OPENWEBUI_OLLAMA_BASE_URL` (must end in `/v1`),
+   `CF_API_TOKEN`, `INFLUX_TOKEN`, and Infisical's own `JWT_SECRET` /
+   `ENCRYPTION_KEY`. The operator syncs them into K8s Secrets automatically.
 
-3. **Deploy applications:**
+3. **Deploy applications** (Bifrost is an OpenAI-compatible gateway; Open WebUI
+   reaches it via the OpenAI API at `/v1/*`, NOT the Ollama API):
    ```bash
-   kubectl apply -f applications/searxng/
-   kubectl apply -f applications/mcpo/
-   kubectl apply -f applications/ollama/
-   kubectl apply -f applications/litellm/
-   kubectl apply -f applications/openwebui/
+   kubectl apply -f clusters/util-server/applications/bifrost/kustomization.yaml
+   kubectl apply -f clusters/util-server/applications/openwebui/kustomization.yaml
+   kubectl apply -f clusters/util-server/applications/searxng/kustomization.yaml
+   kubectl apply -f clusters/util-server/applications/grafana/kustomization.yaml
    ```
 
 4. **Initialize Infisical (secrets management):**
@@ -358,10 +308,10 @@ Persistent volumes (all on NFS, `nfs-client` StorageClass):
 | Issue | Solution |
 |-------|----------|
 | Pods stuck in `Pending` | Check disk space (`df -h`), ensure NFS mounted |
-| Ingress 404 errors | Verify DNS A record points to `192.168.30.230` |
+| Ingress 404 errors | Verify DNS A record points to `192.168.30.217` |
 | TLS certificate not issued | Check DNS provider API credentials |
-| Traefik unreachable | Verify MetalLB not conflicting with Traefik IP |
-| Ollama CPU intensive | Adjust resource limits, ensure enough RAM |
+| Traefik unreachable | k3s ServiceLB binds Traefik to the node IP; check `kubectl get svc -n kube-system traefik` |
+| Memory pressure / OOM-kills | Open WebUI & Infisical are memory-hungry; 16 GB RAM recommended (see Minimum Hardware) |
 
 ### Verification Commands
 

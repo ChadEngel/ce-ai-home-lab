@@ -72,7 +72,7 @@ FluxCD tracks these Helm repositories:
 The `apps.yaml` kustomization applies all components:
 
 1. **Infrastructure first**: Storage and networking
-2. **Then applications**: Open WebUI, MCPO, SearXNG, Ollama
+2. **Then applications**: Open WebUI, Bifrost, Infisical, SearXNG, Grafana
 
 ## GitOps Workflow
 
