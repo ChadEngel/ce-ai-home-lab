@@ -35,7 +35,15 @@ metadata:
 data:
   datasources.yaml: |
     apiVersion: 1
-    deleteDatasources: []
+    # Force Grafana to delete the existing InfluxDB datasource before
+    # re-creating it from this file. This is REQUIRED because Grafana's file
+    # provisioning only applies `secureJsonData` on FIRST creation — it will
+    # NOT overwrite a secure field on an already-existing datasource. Without
+    # this, switching the token from `basicAuthPassword` to `token` (or
+    # rotating the token) silently has no effect.
+    deleteDatasources:
+      - name: InfluxDB
+        orgId: 1
     datasources:
       - name: InfluxDB
         type: influxdb
@@ -46,17 +54,23 @@ data:
         version: 2
         editable: false
         isDefault: true
-        basicAuth: true
-        basicAuthUser: ignored
-        database: kube_metrics
         jsonData:
           timeInterval: 60s
           influxdbVersion: 2
+          # `version: Flux` selects the AUTH scheme (token-based, sends
+          # `Authorization: Token <token>`). Without it Grafana defaults to
+          # InfluxQL auth (looks for `password`, not `token`) and InfluxDB
+          # rejects every query with "unauthorized access" even though the
+          # token is stored. `queryLanguage: flux` below only selects the
+          # query parser, NOT the auth scheme.
+          version: Flux
           organization: home
           defaultBucket: kube_metrics
+          queryLanguage: flux
           tlsSkipVerify: true
         secureJsonData:
-          basicAuthPassword: ${INFLUX_TOKEN}
+          # Grafana sends this as `Authorization: Token <token>` for Flux queries.
+          token: ${INFLUX_TOKEN}
 
 ---
 apiVersion: v1
