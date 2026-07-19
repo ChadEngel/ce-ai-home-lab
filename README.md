@@ -13,6 +13,42 @@ GitOps-friendly manifests on a single-node k3s cluster.
 - **Secrets**: Infisical (self-hosted) for application secrets
 - **Monitoring**: Grafana + InfluxDB v2 (external on `aiserver.home`)
 
+## Prerequisites
+
+Before you can apply anything in this repo, you need the following tooling
+and external services. Full hardware/network/storage details live in
+[`PREREQUISITES.md`](./PREREQUISITES.md).
+
+### Tools to install (on your workstation / deploy host)
+
+| Tool | Why | Install |
+|---|---|---|
+| `git` | Clone this repo | `apt install git` / Homebrew |
+| `kubectl` | Apply manifests, check status | <https://kubernetes.io/docs/tasks/tools/> |
+| `helm` | Install Traefik / cert-manager charts | <https://helm.sh/docs/intro/install/> |
+| `k3s` | The cluster runtime (on the node) | `curl -sfL https://get.k3s.io \| sh -` |
+| `nfs-common` | NFS client on the k3s node | `apt install nfs-common` |
+| (optional) `flux` | GitOps path under `clusters/.../flux/` | <https://fluxcd.io/installation/> |
+
+### External services / accounts
+
+- **A domain** managed in **Cloudflare** (for DNS-01 TLS issuance).
+- **A Cloudflare API token** with `Zone:DNS:Edit` on that zone.
+- **An NFS server** exporting a share for persistent volumes.
+- **An InfluxDB v2** instance (for the Grafana monitoring dashboards). Optional —
+  only needed if you want the cluster-health metrics.
+- **Let's Encrypt** — used automatically by cert-manager (no account needed
+  beyond an email address).
+- **Tailscale** (optional) — for remote access to the LAN.
+
+### On the cluster node
+
+1. Install k3s (above).
+2. Install `nfs-common` and mount the NFS export — see
+   [`persistant_nfs_mount.md`](./persistant_nfs_mount.md).
+3. Copy the k3s kubeconfig to your workstation:
+   `scp node:/etc/rancher/k3s/k3s.yaml ~/.kube/config` and edit the server URL.
+
 ## DNS
 
 All public services resolve via Cloudflare + the Traefik LoadBalancer
@@ -56,8 +92,9 @@ same Traefik IP, so internal and external clients get the same answer.
 │   ├── deployment-test.sh
 │   ├── debug-pods.sh
 │   └── monitor_k3s_health.sh
-└── backups/                    (one-time cluster snapshots)
 ```
+
+(backups/ and other local snapshots are gitignored — see `.gitignore`.)
 
 ## Quick start
 
@@ -138,6 +175,50 @@ The default `openwebui/kustomization.yaml` already points Open WebUI at
 Bifrost via `OLLAMA_BASE_URL=http://bifrost-api.ai.svc.cluster.local:8080/v1`
 plus an `OPENAI_API_KEY` placeholder (Bifrost itself is keyless; the
 key just flips Open WebUI into OpenAI-compatible mode).
+
+## Adapting to your environment
+
+This repo is configured for *my* home lab. To reuse it in another
+environment, search-and-replace the following values across the manifests and
+scripts (a one-time bootstrap step). None of these are secrets — they're
+names/addresses/IPs.
+
+| Value in repo | What it is | Where it appears (examples) |
+|---|---|---|
+| `caehomelab.com` | The public DNS domain | every `Ingress` host, `infisical/ssl-certs.yaml`, `infisical-secrets-sync.yaml` (`hostAPI`), deploy scripts |
+| `ai. / llm. / search. / secrets. / grafana.` subdomains | Public service hostnames | each app's `kustomization.yaml` + `_values/values.yaml` |
+| `192.168.30.217` | k3s node / Traefik LoadBalancer IP (LAN) | `README.md`, DNS records |
+| `192.168.30.230` / `192.168.30.230-240` | MetalLB / Traefik `loadBalancerIP` + pool | `networking/metallb/config.yaml`, `networking/traefik/values.yaml`, `flux/helm-releases.yaml` |
+| `192.168.30.121` | NFS server IP | `storage/nfs/deployment.yaml`, `storage/nfs/nfs-subdir-external-provisioner-values.yaml` |
+| `/data/pod_data` | NFS export path | `storage/nfs/` |
+| `aiserver.home` | External host running InfluxDB + Ollama | `grafana/kustomization.yaml` (datasource), `openwebui/_values/values.yaml` (`OLLAMA_BASE_URL`), `monitor_k3s_health.sh`, `influx-metrics-cm.yaml` |
+| `aiserver.home:8086` | InfluxDB v2 endpoint | Grafana datasource, metrics scripts |
+| InfluxDB org `home`, bucket `kube_metrics` | Monitoring bucket | `scripts/monitor_k3s_health.sh`, `influx-metrics-cm.yaml`, Grafana dashboards |
+| `you@example.com` | Let's Encrypt account email | `networking/cert-manager/clusterissuer.yaml` |
+| `ChadEngel/ce-ai-home-lab` | GitHub repo URL (Flux GitRepository) | `clusters/util-server/flux/gitops-secrets.yml`, `flux/apps.yaml` |
+| Infisical org `caehomelab`, project `secret-management`, env `prod` | Infisical coordinates | `applications/infisical-operator/`, scripts/infisical-agent*.sh |
+
+Quick find-and-replace from the repo root:
+
+```bash
+grep -rIl 'caehomelab.com\|192.168.30\|aiserver.home' clusters/ scripts/ |
+```
+
+### Secrets
+
+**This repo contains no secrets.** All service credentials (Cloudflare API
+token, InfluxDB token, Infisical JWT, DB passwords, TLS keys) live in
+[self-hosted Infisical](https://infisical.com) and are synced into the cluster
+by the Infisical operator. See `Configuration → Secrets` above and
+[`clusters/util-server/applications/infisical-operator/README.md`](./clusters/util-server/applications/infisical-operator/README.md).
+Placeholders in the repo are marked `REPLACE_WITH_*`, `*-change-me`, or
+`your-*-here`.
+
+> **If you forked an earlier revision:** some commits in prior history
+> leaked a Cloudflare API token, an InfluxDB token, and TLS private keys
+> (in a since-removed `backups/` directory). Those credentials were rotated
+> at the provider and the history was rewritten; if you have an old clone,
+> re-clone from `main`.
 
 ## Applications
 

@@ -8,7 +8,9 @@ data:
     set -euo pipefail
 
     HOST="aiserver.home"
-    TOKEN="INFLUX_TOKEN_REDACTED"
+    # Read the InfluxDB token from the environment; never hard-code it.
+    : "${INFLUX_TOKEN:?INFLUX_TOKEN must be set (e.g. from Infisical / a K8s Secret)}"
+    TOKEN="${INFLUX_TOKEN}"
     URL="http://${HOST}/api/v2/write?bucket=kube_metrics&precision=s"
 
     # CPU percentage (non-idle)
