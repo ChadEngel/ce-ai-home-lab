@@ -75,7 +75,8 @@ infisical_agent_token() {
   infisical_agent__load_creds || return 1
   local cache ttl now mtime age token
   cache="$(infisical_agent__token_cache)"; ttl="$(infisical_agent__ttl)"; now=$(date +%s)
-  if [ -f "$cache" ]; then mtime=$(stat -f %m "$cache" 2>/dev/null || stat -c %Y "$cache" 2>/dev/null)
+  if [ -f "$cache" ]; then mtime=$(stat -c %Y "$cache" 2>/dev/null || stat -f %m "$cache" 2>/dev/null || echo 0)
+    case "$mtime" in ''|*[!0-9]*) mtime=0;; esac   # guard against non-numeric garbage
     age=$(( now - mtime ))
   else mtime=0; age=$(( now + 1 )); fi
   if [ "$age" -gt "$ttl" ] || [ ! -s "$cache" ]; then
