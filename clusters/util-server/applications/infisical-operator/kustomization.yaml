@@ -1,0 +1,27 @@
+# Infisical Kubernetes Operator — installs the operator and the
+# InfisicalSecret CRs that sync Infisical secrets into native K8s Secrets.
+#
+# Apply order:
+#   1. install-secrets-operator.yaml  — operator + CRDs + RBAC (namespace: infisical-operator-system)
+#   2. infisical-secrets-sync.yaml    — InfisicalSecret CRs (namespace: ai)
+#
+# The credentials K8s Secret `infisical-universal-auth` (in namespace `ai`)
+# is NOT applied from here — it is created out-of-band so the machine-identity
+# client secret is never committed:
+#
+#   kubectl create secret generic infisical-universal-auth -n ai \
+#     --from-literal=clientId=<machine-identity-client-id> \
+#     --from-literal=clientSecret=<machine-identity-client-secret>
+#
+# Prerequisite: Infisical must be running first (see ../infisical/), the
+# `caehomelab` / `secret-management` project's `prod` environment must hold
+# the secrets, and the Machine Identity `homelab-k8s-operator` must exist
+# with Universal Auth + Viewer role on that project/env.
+# No `namespace:` override here — the operator install uses namespace
+# `infisical-operator-system` (cluster-scoped RBAC) and the InfisicalSecret
+# CRs live in `ai`; each resource keeps its own namespace.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - install-secrets-operator.yaml
+  - infisical-secrets-sync.yaml

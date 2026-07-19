@@ -26,7 +26,7 @@ spec:
   storageClassName: nfs-client
   resources:
     requests:
-      storage: 2Gi
+        storage: 2Gi
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -37,7 +37,7 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
-  ingressClassName: traefik-v2
+  ingressClassName: traefik
   tls:
     - hosts:
         - search.caehomelab.com
@@ -79,9 +79,6 @@ spec:
           ports:
             - containerPort: 8080
               name: http
-          envFrom:
-            - configMapRef:
-                name: searxng-config
           volumeMounts:
             - name: config
               mountPath: /etc/searxng/settings.yml
@@ -95,42 +92,47 @@ spec:
             limits:
               cpu: 250m
               memory: 256Mi
-          livenessProbe:
-            httpGet:
-              path: /healthcheck
-              port: 8080
-            initialDelaySeconds: 30
-            periodSeconds: 10
+          # The image (SearXNG 2026.6.24+) no longer ships a /healthcheck
+          # endpoint — the liveness probe was failing with 404, which made
+          # Kubernetes kill the pod every minute. Readiness on / is enough.
       volumes:
         - name: config
           configMap:
-            name: searxng-config
+            name: searxng-settings
         - name: searxng-data
           persistentVolumeClaim:
             claimName: searxng-pvc
 
 ---
+# SearXNG settings (mounted as /etc/searxng/settings.yml)
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: searxng-config
+  name: searxng-settings
   namespace: ai
 data:
   settings.yml: |
-    # Basic SearXNG configuration
+    use_default_settings: true
     server:
-      secret_key: "66da04495cafe8799ab0e1adab08a4e198f2915639e6848c57ae8e4904f124d"
-      limiter: true
+      secret_key: "searxng-secret-key-change-me"
+      limiter: false
       image_proxy: true
+      method: "POST"
+      bot_detection:
+        enabled: false
+      listen:
+        host: "::"
+        port: 8080
       default_http_headers:
         X-Content-Type-Options: nosniff
         X-XSS-Protection: "1; mode=block"
         Referrer-Policy: no-referrer
-    
     ui:
-      default_locale: "en-US"
-    
+      default_locale: "en"
+      default_theme: simple
     search:
       formats:
         - html
         - json
+      default_formats:
+        - html

@@ -109,7 +109,7 @@ spec:
   tls:
     - hosts:
         - llm.caehomelab.com
-      secretName: litellm-tls
+      secretName: bifrost-tls
   rules:
     - host: llm.caehomelab.com
       http:

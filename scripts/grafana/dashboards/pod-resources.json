@@ -192,7 +192,7 @@
             "uid": "$cluster_datasource"
           },
           "rawQuery": true,
-          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_pod_restarts\" and r.count > 0)"
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_pod_restarts\" and r._field == \"count\" and r._value > 0)"
         }
       ]
     },
@@ -267,7 +267,7 @@
             "uid": "$cluster_datasource"
           },
           "rawQuery": true,
-          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_pod_restarts\" and r.count > 0) |> group() |> last()"
+          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_pod_restarts\" and r._field == \"count\" and r._value > 0) |> group() |> last()"
         }
       ],
       "fieldConfig": {

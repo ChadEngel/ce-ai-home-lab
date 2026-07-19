@@ -102,7 +102,7 @@
             "uid": "$cluster_datasource"
           },
           "rawQuery": true,
-          "query": "from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"nodes_total\") |> last()"
+          "query": "n = from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"nodes_total\") |> last()\np = from(bucket: \"kube_metrics\") |> range(start: v.timeRangeStart) |> filter(fn: (r) => r._measurement == \"k8s_cluster_health\" and r._field == \"nodes_ready_pct\") |> last()\njoin(tables: {n: n, p: p}, on: [\"_time\", \"host\"])\n  |> map(fn: (r) => ({ _time: r._time, host: r.host, _field: \"nodes_ready\", _value: int(v: r._value_n * r._value_p / 100.0) }))"
         }
       ]
     },

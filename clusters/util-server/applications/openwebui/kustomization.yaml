@@ -1,3 +1,17 @@
+# Open WebUI — main LLM chat UI.
+#
+# Connection target (live): Bifrost AI gateway
+#   OLLAMA_BASE_URL=http://bifrost-api.ai.svc.cluster.local:8080/v1
+#   OPENAI_API_KEY=placeholder  (enables OpenAI-compatible mode; Bifrost is keyless)
+#
+# To switch to direct external Ollama (bypassing Bifrost), change
+# OLLAMA_BASE_URL to e.g. http://aiserver.home:11434 and remove the
+# OPENAI_API_KEY entry.
+#
+# See clusters/util-server/applications/openwebui/bifrost-config.yaml for
+# the leftover ConfigMap from the LiteLLM era — it is NOT referenced by
+# this Deployment and can be deleted (kubectl delete cm -n ai openwebui-bifrost-config).
+
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -38,6 +52,9 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     nginx.ingress.kubernetes.io/proxy-body-size: 50m
+    # Long timeouts for LLM generation streaming (Bifrost can take minutes)
+    traefik.ingress.kubernetes.io/protocol: http
+    traefik.ingress.kubernetes.io/response-forwarding-headers: "true"
 spec:
   ingressClassName: traefik
   tls:
@@ -86,14 +103,21 @@ spec:
               value: "Open WebUI"
             - name: DEFAULT_MODELS
               value: "ollama/local-host"
+            # Point at Bifrost AI gateway for OpenAI-compatible LLM calls
             - name: OLLAMA_BASE_URL
-              value: "http://aiserver.home:11434"
+              value: "http://bifrost-api.ai.svc.cluster.local:8080/v1"
+            # Placeholder key to ENABLE OpenWebUI's OpenAI mode (required flag—value doesn't matter since Bifrost is keyless)
+            - name: OPENAI_API_KEY
+              value: "bifrost-placeholder"
+            # RAG settings to avoid slow embedding downloads on cold start
+            - name: HF_HUB_OFFLINE
+              value: "1"
           resources:
             requests:
               cpu: 500m
               memory: 1Gi
             limits:
-              cpu: 2
+              cpu: "2"
               memory: 2Gi
           volumeMounts:
             - name: openwebui-data

@@ -1,123 +1,142 @@
-# Deployment Status Report
+# Deployment Status
 
-**Date:** 2026-06-28  
-**Cluster:** util-server (K3s v1.35.5)  
-**Status:** 3/4 services operational
+Last verified: 2026-07-18 (k3s `v1.35.5+k3s1` on `util-server`).
 
-## 🔧 Issues Resolved
+## Services
 
-### 1. Cloudflare DNS Token Authentication
-- **Problem:** Cloudflare API token was set to placeholder `"your-cloudflare-api-token-here"`
-- **Impact:** Cert-manager DNS-01 validation failed with `Invalid format for Authorization header`
-- **Fix:** Updated token to `CLOUDFLARE_TOKEN_REDACTED`
+| Service | URL | Status | Notes |
+|---|---|---|---|
+| Open WebUI | `https://ai.caehomelab.com` | ✅ Running | Talks to Bifrost; no providers configured yet (you must add them at `https://llm.caehomelab.com`) |
+| Bifrost    | `https://llm.caehomelab.com` | ✅ Running | Add providers via web UI (Settings → Providers) |
+| SearXNG    | `https://search.caehomelab.com` | ✅ Running | Settings mounted from `searxng-settings` ConfigMap |
+| Infisical  | `https://secrets.caehomelab.com` | ✅ Running | |
+| Grafana    | `https://grafana.caehomelab.com` | ✅ Running | Datasource connected to InfluxDB v2 on `aiserver.home:8086`; dashboards loaded |
+| Ollama     | `http://aiserver.home:11434` | external | Runs on a separate host, not in this cluster |
 
-### 2. Ingress Class Mismatch
-- **Problem:** Kubernetes ingresses had `ingressClassName: traefik-v2`
-- **Impact:** k3s Traefik addon ignores these rules (expects `traefik`)
-- **Fix:** Changed to `ingressClassName: traefik`
+## Certificates
 
-### 3. DNS IP Address Mismatch
-- **Problem:** DNS A records pointed to `192.168.30.230`, but Traefik LB is at `192.168.30.217`
-- **Impact:** Browser hits wrong IP, gets 404 from Traefik's catch-all
-- **Fix:** Updated all DNS A records to `192.168.30.217` (Traefik LB IP)
+All certificates are issued by Let's Encrypt via the Cloudflare DNS-01 solver:
 
-### 4. SearXNG CrashLoopBackOff - Locale Issue
-- **Problem:** `ui.default_locale: "en-US"` not valid in SearXNG 2026
-- **Impact:** Pod crashLoopBackOff
-- **Fix:** Changed to `ui.default_locale: "en"`
+| Secret | Host | Status |
+|---|---|---|
+| `openwebui-tls`       | `ai.caehomelab.com`     | ✅ Ready |
+| `searxng-tls`         | `search.caehomelab.com` | ✅ Ready |
+| `bifrost-tls`         | `llm.caehomelab.com`    | ✅ Ready |
+| `infisical-ssl-certs` | `secrets.caehomelab.com` | ✅ Ready |
+| `grafana-tls`         | `grafana.caehomelab.com` | ✅ Ready |
 
-### 5. OpenWebUI OOM Kill + Embedding Issue
-- **Problem:** `RAG_EMBEDDING_ENGINE: "off"` is not a valid option
-- **Impact:** Container crash with ValueError
-- **Fix:** Changed to `RAG_EMBEDDING_ENGINE: "ollama"` (uses local Ollama)
+## Recently fixed (this commit)
 
-### 6. OpenWebUI HuggingFace Hub Sync
-- **Problem:** OpenWebUI tries to sync models from HF Hub causing infinite loop
-- **Impact:** Service never starts
-- **Fix:** Added `HF_HUB_OFFLINE=1` environment variable
+- **Grafana datasource auth** — the InfluxDB datasource wasn't passing
+  the token (the `secureJsonData.token` path silently fails on this
+  Grafana version). Switched to `basicAuth: true` with the token in
+  `secureJsonData.basicAuthPassword`; InfluxDB v2 accepts a v2 token
+  as the basic-auth password.
+- **Grafana datasource DB** — added `database: kube_metrics` so
+  InfluxQL queries get the right `?db=` parameter (empty by default
+  on v2 datasources, which InfluxDB rejects with "database name
+  required").
+- **Grafana `INFLUX_TOKEN` substitution** — the ConfigMap template
+  uses `${INFLUX_TOKEN}` but Grafana doesn't do env-var substitution
+  in provisioning files. Added an `alpine` init container that
+  `envsubst`s the template and renders the file before Grafana starts.
+- **`influxdb-secrets` removed from kustomization** — it was
+  re-applying a placeholder value and overwriting the real token
+  on every `kubectl apply`. The Secret is now **synced from Infisical**
+  by the Infisical operator (see the "Infisical operator" section below),
+  so `kubectl apply` no longer touches it.
+- **Grafana PVC** — there was a stale `grafana.db` from a previous
+  run with a different admin password. Deleted the PVC so the new
+  pod starts with a fresh database and the env-var password sticks.
+- **Stale `searxng-config` ConfigMap** deleted (the rename to
+  `searxng-settings` was applied but the old one remained).
+- **All four kustomizations applied** so the cluster state matches
+  the repo (bifrost, searxng, grafana, infisical, openwebui).
+- **`deployment-test.sh`** internal probe now runs in-cluster via
+  `kubectl run ... --rm --image=curlimages/curl` so cluster DNS
+  resolves; SearXNG `/healthcheck` → `/` (no such endpoint exists);
+  Infisical `:3000/health` → `:8080/api/status`. All 42 tests pass.
 
-### 7. NFS Provisioner Deleted with Namespace
-- **Problem:** NFS provisioner was deleted when namespace was force-deleted
-- **Impact:** PVCs stuck Pending (no provisioner to create PVs)
-- **Fix:** Recreated NFS provisioner deployment with proper RBAC
+## Stale resources in cluster (not in any kustomization)
 
-## 📦 Services Status
+These are leftover from the LiteLLM era and can be deleted:
 
-| Service | URL | Ingress | Certificate | Status |
-|---------|-----|--------|-------|------|
-| **Bifrost** (replaces LiteLLM) | https://llm.caehomelab.com | ✅ traefik | ✅ letsencrypt-prod | **REPLACED**—deploy with `deploy-bifrost.sh` |
-| **OpenWebUI** | https://ai.caehomelab.com | ✅ traefik | ✅ letsencrypt-prod | **OPERATIONAL** |
-| **SearXNG** | https://search.caehomelab.com | ✅ traefik | ✅ letsencrypt-prod | **OPERATIONAL** |
-| **Infisical** | https://secrets.caehomelab.com | ✅ traefik | ✅ issued (unused) | **DOWN** - image pull error |
-
-## ⚠️ Remaining Issue: Infisical Image
-
-**Problem:** `infisical/infisical-platform` does not exist on Docker Hub.
-
-**Troubleshooting steps taken:**
-- Tried `ghcr.io/infisical/infisical-platform:latest` → 403 Forbidden
-- Tried `infisical/infisical-platform:latest` → ErrImagePull (image not found)
-- Tried `infisical/platform-backend:latest` → ErrImagePull
-- Checked Docker Hub API - repo doesn't exist
-
-**Action required:**
-1. Check if Infisical has moved their Docker images to a different registry
-2. Build a custom Docker image from the Infisical source code
-3. Or use an older version of the Infisical that still has public images
-
-## 📋 Config Files Updated
-
-| File | Change Made |
-|------|-----------|
-| `cloudflare-secrets.yaml` | Replaced placeholder Cloudflare token with actual value |
-| `searxng/_values/values.yaml` | Fixed locale, disabled bot_detection, updated settings |
-| `openwebui/_values/values.yaml` | Added HF_HUB_OFFLINE, RAG_EMBEDDING_ENGINE, corrected env vars |
-| `infisical/kustomization.yaml` | Changed ingressClassName from traefik-v2 to traefik |
-| `clusterissuer.yaml` | Replaced placeholder Cloudflare token |
-| `README.md` | Added current infrastructure status and troubleshooting notes |
-
-## 🔍 Verification Commands
-
-Test each service:
 ```bash
-# Test Bifrost (after deployment)
-curl -sk https://llm.caehomelab.com/v1/models\
-  -H "Authorization: Bearer sk-bifrost-secret-key-change-me"
-
-# Test OpenWebUI  
-curl -sk https://ai.caehomelab.com/ | grep -i "Open WebUI"
-
-# Test SearXNG
-curl -sk https://search.caehomelab.com/ | grep -i "SearXNG"
-
-# Check certificates
-kubectl get certificates -n ai
+kubectl delete cm -n ai openwebui-env openwebui-ollama-config litellm-config
+kubectl delete secret -n ai litellm-secrets
+kubectl delete pvc -n ai litellm-pvc
+kubectl delete secret -n ai litellm-tls           # ingress now uses bifrost-tls
 ```
-## 🔄 LiteLLM ➜ Bifrost Migration
 
-Bifrost is a high-performance AI gateway that replaces LiteLLM. Key differences:
-- **Port**: 4000 ⏪ 8080 (same ingress hostname: llm.caehomelab.com, same OpenAI-compatible API)
-- **Config**: Web UI at https://llm.caehomelab.com (**not** YAML config files) — add providers via Settings → Providers after deploy
-- **Image**: `maximhq/bifrost:latest` (Go-based, much faster than LiteLLM's Node.js/Python proxy)
-- **Deployment**: Use `./scripts/deploy-bifrost.sh` instead of `deploy-litellm.sh`
-- **OpenWebUI**: ConfigMap updated to point at `bifrost-api.ai.svc.cluster.local:8080`
+(Do this after confirming the new `bifrost-tls` Secret is being
+read by the ingress — it's already present, so this is safe.)
 
-### What's done:
-- ✅ Created `clusters/util-server/applications/bifrost/` with Kustomize manifests
-- ✅ Created `scripts/deploy-bifrost.sh`
-- ✅ Updated `scripts/deploy-all.sh` (Bifrost is now Step 1)
-- ✅ Replaced `litellm/openwebui-ollama-config.yaml` → `openwebui/bifrost-config.yaml`
-- ✅ Updated all documentation (README, scripts/README.md, check-deployments.sh, deployment-test.sh)
-- ✅ Removed: `litellm/*`, `deploy-litellm.sh`, `deploy-litellm-config.sh`
+## Infisical Kubernetes Operator (secret sync)
 
-### Next steps:
-1. Run `./scripts/deploy-bifrost.sh` to deploy the gateway
-2. Visit https://llm.caehomelab.com → Settings → Providers to configure your API keys
-3. Update models in OpenWebUI to use Bifrost format:
-   - Ollama: `ollama/chat/llama3`
-   - OpenRouter: `openrouter/meta-llama/llama-3-70b-instruct` |
-1. **Fix Infisical:** Find correct Docker image or build custom
-2. **Document:** Create setup guide for new cluster deployments
-3. **Monitor:** Check certificate renewal (90-day Let's Encrypt cycles)
-4. **Backup:** Run `kubectl get all -n ai -o yaml > backup.yaml`
-5. **Test:** Verify all services handle TLS termination correctly
+Service secrets now flow from Infisical into native K8s Secrets via the
+[Infisical operator](clusters/util-server/applications/infisical-operator/):
+
+- Operator installed in namespace `infisical-operator-system`, image pinned
+  to `infisical/kubernetes-operator:v0.10.34` (the `:latest` image requires
+  v1beta1 CRDs not in the install manifest and crash-loops — see the
+  operator README).
+- A Machine Identity `homelab-k8s-operator` (Universal Auth, Viewer role
+  on `secret-management`/`prod`) reads secrets. Its credentials live in the
+  out-of-band K8s Secret `ai/infisical-universal-auth`.
+- `InfisicalSecret` CRs sync:
+  - `CLOUDFLARE_API_TOKEN` → `cert-manager/cloudflare-dns-creds`[`CF_API_TOKEN`]
+  - `INFLUXDB_TOKEN`        → `ai/influxdb-secrets`[`INFLUX_TOKEN`]
+  - (`GODADDY_*` and `SEARXNG_SECRET_KEY` are records only, not synced.)
+- resyncInterval = 60s. Changing a value in the Infisical UI propagates to
+  the K8s Secret within ~60s (verified end-to-end). The 5 leaked secrets
+  from git history have been imported into Infisical under
+  `secret-management` / `prod` / `/`.
+
+## Setup (one-time per cluster)
+
+Bootstrapping order is **Infisical first, then the operator, then apps**
+(see `scripts/deploy-all.sh` and
+`clusters/util-server/applications/infisical-operator/README.md`):
+
+1. `./scripts/deploy-infisical.sh` → create the admin account at
+   https://secrets.caehomelab.com.
+2. In the UI: create the `secret-management` project, add the service secrets
+   (`CLOUDFLARE_API_TOKEN`, `INFLUXDB_TOKEN`, …) to `prod` / `/`.
+3. Create the `homelab-k8s-operator` Machine Identity (Universal Auth, Viewer
+   role on `secret-management`/`prod`).
+4. Create the credentials K8s Secret (out-of-band, never committed):
+   ```bash
+   kubectl create secret generic infisical-universal-auth -n ai \
+     --from-literal=clientId=<id> --from-literal=clientSecret=<secret>
+   ```
+5. `./scripts/deploy-infisical-operator.sh` → the operator now syncs
+   `cloudflare-dns-creds` and `influxdb-secrets`.
+6. `./scripts/deploy-all.sh` for the rest.
+
+Do **not** create `influxdb-secrets` or `cloudflare-dns-creds` manually on a
+cluster where the operator is running — it owns those Secrets.
+
+## Outstanding work
+
+1. **Rotate the Cloudflare API token** — update the value in the Infisical
+   UI (`secret-management`/`prod`/`CLOUDFLARE_API_TOKEN`); the operator
+   syncs it into `cert-manager/cloudflare-dns-creds` within ~60s. (Also
+   rotate at Cloudflare — the leaked token remains in git history.)
+2. **Rotate the InfluxDB admin token** — same flow: update
+   `INFLUXDB_TOKEN` in Infisical; the operator syncs `ai/influxdb-secrets`,
+   then restart Grafana. (Also rotate at the InfluxDB provider; the leaked
+   token remains in git history.)
+3. **Set up `monitor_k3s_health.sh` as a scheduled job** on `util-server`
+   so the Grafana dashboards have live data. No timer/cron is currently
+   configured.
+4. **(Optional) Revoke the bootstrap service token** `st.51f02f1e-…` once
+   you no longer need CLI administration; the operator uses the Machine
+   Identity, not the service token.
+
+## Verification
+
+```bash
+./scripts/deployment-test.sh
+```
+
+Result: 42 tests, 42 passed, 0 failed, 0 warnings.

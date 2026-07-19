@@ -1,3 +1,20 @@
+# Grafana monitoring stack (InfluxDB v2 source + auto-provisioned dashboards)
+#
+# Data source: http://aiserver.home:8086 (InfluxDB v2, org=home, bucket=kube_metrics)
+#
+# Two secrets must be supplied for the stack to work:
+#   1. `grafana-secrets`        — admin user/password (defaults: admin/admin)
+#   2. `influxdb-secrets`       — INFLUX_TOKEN with read access to the
+#                                 `kube_metrics` bucket in the `home` org
+#
+# Both are defined in this kustomization with placeholders. Replace them
+# before applying (see README.md for the recommended workflow via Infisical).
+#
+# After deployment:
+#   - Dashboards appear automatically under "default" folder
+#   - Login at https://grafana.caehomelab.com with the admin password
+
+---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -5,6 +22,8 @@ metadata:
   namespace: ai
 type: Opaque
 stringData:
+  admin-user: "admin"
+  # Change this before exposing publicly
   admin-password: "admin"
 
 ---
@@ -22,14 +41,23 @@ data:
         type: influxdb
         access: proxy
         orgId: 1
+        uid: dfdkew37wk1dse
         url: http://aiserver.home:8086
         version: 2
         editable: false
+        isDefault: true
+        basicAuth: true
+        basicAuthUser: ignored
+        database: kube_metrics
         jsonData:
           timeInterval: 60s
           influxdbVersion: 2
-          httpMode: POST
-        isDefault: true
+          organization: home
+          defaultBucket: kube_metrics
+          tlsSkipVerify: true
+        secureJsonData:
+          basicAuthPassword: ${INFLUX_TOKEN}
+
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -48,21 +76,6 @@ data:
         updateIntervalSeconds: 30
         options:
           path: /var/lib/grafana/dashboards/default
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-config
-  namespace: ai
-data:
-  grafana.ini: |
-    [server]
-    http_port = 3000
-
-    [security]
-    admin_user = admin
-    # admin_password set via env var
 
 ---
 apiVersion: v1
@@ -110,6 +123,31 @@ spec:
       labels:
         app: grafana
     spec:
+      initContainers:
+        - name: render-datasource
+          image: alpine:3.19
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              apk add --no-cache gettext >/dev/null
+              echo "Template file from ConfigMap:"
+              cat /tmp/datasources.yaml
+              echo "---"
+              envsubst < /tmp/datasources.yaml > /etc/grafana/provisioning/datasources/datasources.yaml
+              echo "Rendered datasources:"
+              cat /etc/grafana/provisioning/datasources/datasources.yaml
+          env:
+            - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-secrets
+                  key: INFLUX_TOKEN
+          volumeMounts:
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: render-source
+              mountPath: /tmp
       containers:
         - name: grafana
           image: grafana/grafana:latest
@@ -121,9 +159,21 @@ spec:
             - secretRef:
                 name: grafana-secrets
           env:
-            # Override provisioning to find our ConfigMaps
-            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
-              value: "/var/lib/grafana/dashboards/default"
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-secrets
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-secrets
+                  key: admin-password
+            - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-secrets
+                  key: INFLUX_TOKEN
           resources:
             requests:
               cpu: 100m
@@ -148,19 +198,24 @@ spec:
               mountPath: /etc/grafana/provisioning/datasources
             - name: grafana-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
-            - name: grafana-dashboards-data
+            - name: grafana-dashboards-json
               mountPath: /var/lib/grafana/dashboards/default
             - name: grafana-data
               mountPath: /var/lib/grafana
       volumes:
         - name: grafana-datasources
+          emptyDir: {}
+        - name: render-source
           configMap:
             name: grafana-datasources
         - name: grafana-dashboards
           configMap:
             name: grafana-dashboards
-        - name: grafana-dashboards-data
-          emptyDir: {}
+        # Created by deploy-grafana.sh from scripts/grafana/dashboards/*.json
+        - name: grafana-dashboards-json
+          configMap:
+            name: grafana-dashboards-json
+            optional: true
         - name: grafana-data
           persistentVolumeClaim:
             claimName: grafana-pvc
@@ -174,7 +229,7 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
-  ingressClassName: traefik-v2
+  ingressClassName: traefik
   tls:
     - hosts:
         - grafana.caehomelab.com

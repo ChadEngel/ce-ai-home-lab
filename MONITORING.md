@@ -1,106 +1,102 @@
-# CE AI Lab - Kubernetes Monitoring Stack
+# CE AI Lab — Monitoring Stack
 
-This directory contains the complete configuration for monitoring the CE AI Lab Kubernetes homelab using InfluxDB and Grafana.
+InfluxDB v2 stores cluster metrics. Grafana visualises them.
 
-## 🏛 Architecture Overview
-- **Metrics Collector**: A bash-based metrics pusher gathers live system stats (CPU, Memory Uptime) from Kubernetes nodes and ships them to InfluxDB. 
-- **Backend Storage**: [InfluxDB](http://aiserver.home:8086) Bucket `kube_metrics` (Org: `home`).
-- **Visualization**: Standalone Grafana instance using Flux queries against the Influx datasource.
+- **InfluxDB**: `http://aiserver.home:8086` (org `home`, bucket `kube_metrics`)
+- **Grafana**: `https://grafana.caehomelab.com` (deployed from
+  `clusters/util-server/applications/grafana/`)
+- **Writer**: `scripts/monitor_k3s_health.sh` runs as a service on
+  a node (see below)
 
----
+## What the writer does
 
-## 📊 Data Source Setup (Grafana)
-To view metrics, configure Grafana's InfluxDB data source exactly as shown below:
+Every 60 seconds the script:
 
-| Field | Value |
-| :--- | :--- |
-| **URL** | `http://aiserver.home` |
-| **Query Language** | Flux (`v0.x`) |
-| **Auth Type** | Token |
-| **Token** | `INFLUX_TOKEN_REDACTED` |
-| **Default Bucket** | `kube_metrics` |
-| **Organization** | `home` |
+1. Collects node-level health (total / ready nodes, pod counts,
+   failed/pending pods, stuck PVs) from `kubectl`
+2. Collects per-pod CPU, memory, and restart counts (via
+   `kubectl top pods`, which requires `metrics-server`)
+3. Pushes everything as raw counters to InfluxDB
 
-> ✅ Test the connection in Grafana. You should see a green *Success* message once configured!
+The Grafana dashboards compute derived values (percentages, sums)
+in Flux so the writer stays simple.
 
----
-
-## 🎨 Import Dashboard
-Navigate to **Connections > Dashboards > + (Create) > Import**. Select and paste the contents of:
-📁 **Path**: `scripts/grafana/dashboards/final-k8s-monitoring.json`
-
-When prompted for a datasource, select **InfluxDB** (`dfdkew37wk1dse`). The dashboard will immediately pull live data from your cluster!
-
----
-
-## ⚙️ Automated Metrics Pusher (Run on Homelab)
-To continuously stream metrics into InfluxDB while Grafana visualizes them, run the following script directly on a Kubernetes node before every reboot or sleep cycle:
+## Setup the writer
 
 ```bash
-# 1. Create the pusher script
-cat > /usr/local/bin/push_cluster_metrics.sh << 'EOF'
-#!/bin/bash
-HOST="http://aiserver.home:8086"
-BUCKET="kube_metrics"
-ORG="home"
-TOKEN="INFLUX_TOKEN_REDACTED"
+# 1. Install the script on a node (the control-plane works fine)
+sudo install -m755 scripts/monitor_k3s_health.sh /usr/local/bin/
 
-while true; do
-   read -r user nice system idle _ < /proc/stat
-   total=$((user + nice + system + idle))
-   usage=$((total - idle))
-   
-   if [ "$total" -gt 0 ]; then
-       cpupct=$(echo "scale=2; ($usage * 100.0) / $total" | bc)
-   else
-       cpupct="0.00"
-   fi
+# 2. Set the required environment variable
+sudo tee /etc/default/k3s-metrics-push >/dev/null <<'EOF'
+INFLUX_HOST="http://aiserver.home:8086"
+INFLUX_ORG="home"
+INFLUX_BUCKET="kube_metrics"
+INFLUX_TOKEN="<your-influxdb-readwrite-token>"
+EOF
+sudo chmod 600 /etc/default/k3s-metrics-push
 
-   mem_total=$(grep '^MemTotal:' /proc/meminfo | awk '{print $2}')
-   mem_free=$(grep '^MemAvailable:' /proc/meminfo | awk '{print $2}')
-   
-   if [ "$mem_total" -gt 0 ]; then
-       freepct=$(echo "scale=2; ($mem_free * 100.0) / $mem_total" | bc)
-   else
-       freepct="0.00"
-   fi
+# 3. Run as a systemd service
+sudo tee /etc/systemd/system/k3s-metrics-push.service >/dev/null <<'EOF'
+[Unit]
+Description=CE AI Lab cluster metrics pusher
+After=network-online.target
+Wants=network-online.target
 
-   uptime_s=$(awk '{print int($1)}' /proc/uptime)
+[Service]
+EnvironmentFile=/etc/default/k3s-metrics-push
+ExecStart=/usr/local/bin/monitor_k3s_health.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/k3s-metrics-push.log
+StandardError=append:/var/log/k3s-metrics-push.log
 
-   curl -s -X POST "${HOST}/api/v2/write?org=${ORG}&bucket=${BUCKET}&precision=s" \
-        -H "Authorization: Token ${TOKEN}" \
-        --data-binary "cpu_load_pct,host=$(hostname) value=${cpupct} 
-system_mem_free_pct,host=$(hostname) value=${freepct} 
-node_uptime_sec,host=$(hostname) value=${uptime_s}" > /dev/null
-  
-  sleep 60
-done
+[Install]
+WantedBy=multi-user.target
 EOF
 
-# 2. Make it executable and start it in the background!
-chmod +x /usr/local/bin/push_cluster_metrics.sh
-nohup /usr/local/bin/push_cluster_metrics.sh > /dev/null 2>&1 &
-
-echo "[✅] Metrics pusher is actively streaming to InfluxDB!"
-
-# 3. Inject a seed metric immediately so graphs don't look empty!
-curl -s -X POST "http://aiserver.home:8086/api/v2/write?org=home&bucket=kube_metrics&precision=s" \
-     -H "Authorization: Token INFLUX_TOKEN_REDACTED" \
-     --data-raw "cpu_load_pct,host=cluster value=42.0 
-mem_free_pct,host=cluster value=65.9 
-node_uptime_sec,host=cluster value=1000"
+sudo systemctl daemon-reload
+sudo systemctl enable --now k3s-metrics-push.service
 ```
 
----
+## Set up Grafana
 
-## 🔍 Verify Data Flow
-Run this query directly in your Influx CLI or via browser to ensure it's actively writing and readable:
+The Grafana stack is provisioned automatically. Before deploying,
+make sure the InfluxDB token is set:
 
 ```bash
-curl -s http://aiserver.home/api/v2/query?org=home \
-  -H "Authorization: Token <YOUR_TOKEN>" \
-  -H 'Content-Type: application/vnd.flux' \
-  --data-raw 'from(bucket:"kube_metrics") |> range(start:-5m) |> last()'
+INFLUX_TOKEN='<your-influxdb-readwrite-token>'
+kubectl create secret generic influxdb-secrets \
+    --from-literal=INFLUX_TOKEN="$INFLUX_TOKEN" -n ai \
+    --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-If you see returned JSON with `_measurement`, `_value`, and `_time` fields, your entire stack is healthy! 🎉
+Then:
+
+```bash
+./scripts/deploy-grafana.sh
+```
+
+This applies the kustomization and builds a `grafana-dashboards-json`
+ConfigMap from `scripts/grafana/dashboards/*.json`. The file provider
+in Grafana picks the dashboards up from `/var/lib/grafana/dashboards/default`.
+
+## Dashboards
+
+- **CE AI Lab – Kubernetes Realtime View** (`ceai-k8s-influx-metrics`):
+  node health percentage, total/ready nodes, total pods, failed
+  pods, stuck PV count, and trend graphs.
+- **CE AI Lab – Pod Resources & OOM Monitoring** (`ceai-pod-resources`):
+  per-pod CPU and memory, plus a table of pods that have restarted.
+
+## Verify data is flowing
+
+```bash
+curl -s "http://aiserver.home:8086/api/v2/query?org=home" \
+  -H "Authorization: Token $INFLUX_TOKEN" \
+  -H 'Content-Type: application/vnd.flux' \
+  --data 'from(bucket:"kube_metrics") |> range(start:-5m) |> last()' | head -c 500
+```
+
+You should see JSON rows with `_measurement=k8s_cluster_health` and the
+expected fields.

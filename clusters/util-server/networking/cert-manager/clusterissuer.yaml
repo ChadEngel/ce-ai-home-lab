@@ -14,19 +14,3 @@ spec:
             apiTokenSecretRef:
               name: cloudflare-dns-creds
               key: CF_API_TOKEN
-
----
-# Cloudflare DNS credentials for cert-manager
-# Get API token from: https://dash.cloudflare.com/settings/api-tokens
-# Create this secret:
-# kubectl create secret generic cloudflare-dns-creds \
-#   --from-literal=CF_API_TOKEN="your-token" \
-#   -n cert-manager
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cloudflare-dns-creds
-  namespace: cert-manager
-type: Opaque
-stringData:
-  CF_API_TOKEN: "CLOUDFLARE_TOKEN_REDACTED"
