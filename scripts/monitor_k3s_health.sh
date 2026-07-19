@@ -159,7 +159,7 @@ pod_restart_data=$(kubectl get pods --all-namespaces \
     -o custom-columns='NAMESPACE:{.metadata.namespace},POD:{.metadata.name},RESTARTS:{.status.containerStatuses[0].restartCount}' \
     2>/dev/null | tail -n +2 || true)
 if [ -n "$pod_restart_data" ]; then
-    while IFS=$'\t' read -r ns pod rest_count; do
+    while read -r ns pod rest_count; do
         [ -z "$ns" ] || [ -z "$pod" ] && continue
         : "${rest_count:=0}"
         ns_t=$(escape_lp "$ns")
