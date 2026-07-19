@@ -24,16 +24,6 @@ spec:
 
 ---
 apiVersion: v1
-kind: Secret
-metadata:
-  name: bifrost-secrets
-  namespace: ai
-type: Opaque
-stringData:
-  BIFROST_API_KEY: "sk-bifrost-secret-key-change-me"
-
----
-apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: bifrost-pvc

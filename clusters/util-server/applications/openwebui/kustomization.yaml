@@ -1,9 +1,12 @@
 # Open WebUI — main LLM chat UI.
 #
 # Connection target (live): Bifrost AI gateway (OpenAI-compatible)
-#   OPENAI_API_BASE_URL=http://bifrost-api.ai.svc.cluster.local:8080/v1
-#   OPENAI_API_KEY=bifrost-placeholder  (non-empty value ENABLES Open WebUI's
-#     OpenAI connection; the value is irrelevant since Bifrost is keyless)
+#   OPENAI_API_BASE_URL - from Infisical secret OPENWEBUI_OLLAMA_BASE_URL
+#     (synced into K8s Secret openwebui-secrets). MUST end in /v1, e.g.
+#     https://llm.caehomelab.com/v1 — Bifrost serves /v1/* only.
+#   OPENAI_API_KEY      - from Infisical secret BIFROST_OLLAMA_KEY (synced into
+#     K8s Secret bifrost-secrets as BIFROST_API_KEY). Same key Bifrost reads
+#     as its gateway key, so the hop is authenticated once enforcement is on.
 #
 # IMPORTANT: Bifrost speaks the OpenAI API (/v1/models, /v1/chat/completions),
 # NOT the Ollama API (/api/tags). So Open WebUI MUST reach it via the OpenAI
@@ -110,12 +113,24 @@ spec:
               value: "Open WebUI"
             # Bifrost is an OpenAI-compatible gateway, so Open WebUI must use
             # the OpenAI connection — NOT OLLAMA_BASE_URL (Bifrost has no /api/tags).
+            # Base URL comes from Infisical (OPENWEBUI_OLLAMA_BASE_URL) via the
+            # openwebui-secrets sync. MUST include the /v1 suffix — Bifrost serves
+            # the OpenAI API at /v1/* only; without /v1 Open WebUI hits the HTML UI.
             - name: OPENAI_API_BASE_URL
-              value: "http://bifrost-api.ai.svc.cluster.local:8080/v1"
-            # Non-empty key ENABLES Open WebUI's OpenAI mode (value is a dummy —
-            # Bifrost is keyless). Without this, OPENAI_API_BASE_URL is ignored.
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui-secrets
+                  key: OPENAI_API_BASE_URL
+            # Bearer key Open WebUI sends to Bifrost. Same Infisical secret
+            # (BIFROST_OLLAMA_KEY) that Bifrost reads as BIFROST_API_KEY, so the
+            # OpenWebUI->Bifrost hop is authenticated with the key Bifrost expects
+            # once gateway-key enforcement is enabled in the Bifrost UI. A non-empty
+            # value also ENABLES Open WebUI's OpenAI mode.
             - name: OPENAI_API_KEY
-              value: "bifrost-placeholder"
+              valueFrom:
+                secretKeyRef:
+                  name: bifrost-secrets
+                  key: BIFROST_API_KEY
             # RAG settings to avoid slow embedding downloads on cold start
             - name: HF_HUB_OFFLINE
               value: "1"
