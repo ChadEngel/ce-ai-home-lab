@@ -36,7 +36,10 @@ and external services. Full hardware/network/storage details live in
 - **A Cloudflare API token** with `Zone:DNS:Edit` on that zone.
 - **An NFS server** exporting a share for persistent volumes.
 - **An InfluxDB v2** instance (for the Grafana monitoring dashboards). Optional —
-  only needed if you want the cluster-health metrics.
+  only needed if you want the cluster-health metrics. **It is NOT deployed by
+  this repo** — it runs on a separate host (`aiserver.home:8086` here). If you
+  want monitoring, run your own InfluxDB v2 and repoint the Grafana datasource
+  + `scripts/monitor_k3s_health.sh` at it (see the Monitoring section).
 - **Let's Encrypt** — used automatically by cert-manager (no account needed
   beyond an email address).
 - **Tailscale** (optional) — for remote access to the LAN.
@@ -242,6 +245,17 @@ auto-provisioned dashboards that read this data.
 
 The script requires `INFLUX_TOKEN` to be set in the environment before
 running — see the header comment.
+
+> **Heads-up: InfluxDB is external.** The InfluxDB v2 instance Grafana reads
+> from is **not** deployed by this repo — it lives on a separate server
+> (`aiserver.home:8086`). If you adapt this lab, you have two options:
+> - **Use your own InfluxDB**: edit the Grafana datasource `url`/`org`/`bucket`
+>   in `clusters/util-server/applications/grafana/kustomization.yaml`, and set
+>   `INFLUX_HOST`/`INFLUX_ORG`/`INFLUX_BUCKET` (or their defaults) in
+>   `scripts/monitor_k3s_health.sh` to point at your instance. Put the read
+>   token in Infisical as `INFLUXDB_TOKEN` (synced to `influxdb-secrets`).
+> - **Skip monitoring**: don't deploy Grafana and don't run the script. The
+>   rest of the lab (Open WebUI, Bifrost, SearXNG, Infisical) is unaffected.
 
 ## Architecture
 

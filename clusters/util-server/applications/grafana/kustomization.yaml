@@ -1,6 +1,13 @@
 # Grafana monitoring stack (InfluxDB v2 source + auto-provisioned dashboards)
 #
-# Data source: http://aiserver.home:8086 (InfluxDB v2, org=home, bucket=kube_metrics)
+# ⚠️  InfluxDB is NOT part of this cluster — it runs on a SEPARATE host
+#     (here: http://aiserver.home:8086, a different physical machine). The
+#     data source URL, org (`home`), and bucket (`kube_metrics`) below are
+#     specific to this lab. If you reuse this manifest, point `url` at your
+#     own InfluxDB v2 instance and match its org/bucket, or remove the
+#     Grafana deployment entirely if you don't run a metrics store.
+#     (The same applies to scripts/monitor_k3s_health.sh — it pushes to
+#     $INFLUX_HOST, default http://aiserver.home:8086.)
 #
 # Two secrets must be supplied for the stack to work:
 #   1. `grafana-secrets`        — admin user/password (defaults: admin/admin)
