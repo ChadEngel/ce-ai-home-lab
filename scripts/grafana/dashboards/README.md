@@ -24,6 +24,28 @@ at `/var/lib/grafana/dashboards/default`.
     `k8s_pod_resources` + `k8s_pod_restarts`. Cells with high restart counts
     are highlighted (yellow ≥1, red ≥5) as a crude OOMKilled indicator.
 
+- **`pod-resource-utilization.json`** — `CE AI Lab — Pod Resource Utilization`
+  Utilization-over-time companion to the health dashboard, for capacity
+  planning. Same datasource / `kube_metrics` bucket / Flux. A `$namespace`
+  variable filters the per-pod panels (default: All). Data source is the same
+  `k8s_pod_resources` measurement (per-pod `cpu_millicores` + `memory_kb`
+  every 60s).
+
+  Panels:
+  - **Cluster CPU Usage** — sum of `cpu_millicores` across all pods per
+    scrape (instantaneous total pod CPU). Compare against node allocatable
+    (~4000 mcores) to see headroom.
+  - **Cluster Memory Usage (MiB)** — sum of `memory_kb` across all pods per
+    scrape. Compare against node allocatable (~4880 MiB).
+  - **Per-pod CPU over time** — one line per pod (`aggregateWindow` max).
+    Legend table shows last + max per pod; toggle pods to isolate bursts.
+  - **Per-pod Memory over time (MiB)** — one line per pod.
+  - **Peak & Avg per pod (selected time range)** — THE sizing table: for each
+    pod, peak + average CPU (mcores) and memory (MiB) over the selected
+    time range. Use Peak to set limits, Avg+Peak to set requests. Set the
+    top-right time range to a representative window (e.g. a busy hour or a
+    full day) before sizing. Sorted by CPU peak desc.
+
 ## Datasource requirements
 
 The dashboard hardcodes datasource uid `dfdkew37wk1dse`, which is the uid set
@@ -44,4 +66,5 @@ The previous dashboards (`final-k8s-monitoring.json`, `k8s-monitoring.json`,
 `pod-resources.json`) were removed — they used a `$cluster_datasource`
 templating variable and the datasource was provisioned without
 `queryLanguage: flux`, so every panel sent a malformed empty InfluxQL query
-and showed no data. They're superseded by `k8s-cluster-monitor.json`.
+and showed no data. They're superseded by `k8s-cluster-monitor.json` and
+`pod-resource-utilization.json`.

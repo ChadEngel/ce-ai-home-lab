@@ -1,0 +1,150 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Cluster CPU Usage (millicores, all pods summed)",
+      "description": "Total CPU used across every pod, per scrape (60s). Node has 4000 mcores — distance from that line is headroom. Useful for seeing aggregate demand trends and burst peaks.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"kube_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"k8s_pod_resources\" and r._field == \"cpu_millicores\")\n  |> group(columns: [\"_time\"])\n  |> sum(column: \"_value\")\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> yield(name: \"cluster_cpu\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mcore",
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 20, "stacking": { "mode": "none", "group": "A" }, "pointSize": 3, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false }, "tooltip": { "mode": "single", "sort": "none" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cluster Memory Usage (MiB, all pods summed)",
+      "description": "Total memory used across every pod, per scrape. Node has ~4880 MiB allocatable — headroom = that minus this line.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"kube_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"k8s_pod_resources\" and r._field == \"memory_kb\")\n  |> group(columns: [\"_time\"])\n  |> sum(column: \"_value\")\n  |> map(fn: (r) => ({ r with _value: r._value / 1024.0 }))\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> yield(name: \"cluster_mem\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "MiB",
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 20, "stacking": { "mode": "none", "group": "A" }, "pointSize": 3, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false }, "tooltip": { "mode": "single", "sort": "none" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Per-pod CPU over time (mcores)",
+      "description": "One line per pod. Toggle pods in the legend to isolate workloads. Look for tall/narrow spikes = bursty pods; flat high lines = steady consumers.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 9 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"kube_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"k8s_pod_resources\" and r._field == \"cpu_millicores\" and (r.namespace == \"${namespace}\" or \"${namespace}\" == \"all\"))\n  |> group(columns: [\"namespace\", \"pod\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"pod\"])\n  |> yield(name: \"per_pod_cpu\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mcore",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "stacking": { "mode": "none", "group": "A" }, "pointSize": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Per-pod Memory over time (MiB)",
+      "description": "One line per pod. Memory is usually steady — rising lines may indicate a leak. Spikes = transient allocations (embedding loads, GC).",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 9 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"kube_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"k8s_pod_resources\" and r._field == \"memory_kb\" and (r.namespace == \"${namespace}\" or \"${namespace}\" == \"all\"))\n  |> group(columns: [\"namespace\", \"pod\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> map(fn: (r) => ({ r with _value: r._value / 1024.0 }))\n  |> keep(columns: [\"_time\", \"_value\", \"pod\"])\n  |> yield(name: \"per_pod_mem\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "MiB",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "stacking": { "mode": "none", "group": "A" }, "pointSize": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "table",
+      "title": "Peak & Avg per pod (selected time range)",
+      "description": "THE sizing table. For each pod: peak and average CPU (mcores) and memory (MiB) over the selected range. Use Peak to set limits, Avg+Peak to set requests. Sort by any column. Pick the time range (top-right) to size against a representative window.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 19 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "cpu = from(bucket: \"kube_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"k8s_pod_resources\" and r._field == \"cpu_millicores\" and (r.namespace == \"${namespace}\" or \"${namespace}\" == \"all\"))\n  |> group(columns: [\"namespace\", \"pod\"])\n\ncpu_max = cpu |> max(column: \"_value\") |> set(key: \"_field\", value: \"cpu_peak_mcores\")\ncpu_avg = cpu |> mean(column: \"_value\") |> set(key: \"_field\", value: \"cpu_avg_mcores\")\n\nmem = from(bucket: \"kube_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"k8s_pod_resources\" and r._field == \"memory_kb\" and (r.namespace == \"${namespace}\" or \"${namespace}\" == \"all\"))\n  |> group(columns: [\"namespace\", \"pod\"])\n\nmem_max = mem |> max(column: \"_value\") |> set(key: \"_field\", value: \"mem_peak_mib\") |> map(fn: (r) => ({ r with _value: r._value / 1024.0 }))\nmem_avg = mem |> mean(column: \"_value\") |> set(key: \"_field\", value: \"mem_avg_mib\") |> map(fn: (r) => ({ r with _value: r._value / 1024.0 }))\n\nunion(tables: [cpu_max, cpu_avg, mem_max, mem_avg])\n  |> pivot(rowKey: [\"namespace\", \"pod\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"namespace\", \"pod\", \"cpu_peak_mcores\", \"cpu_avg_mcores\", \"mem_peak_mib\", \"mem_avg_mib\"])\n  |> sort(columns: [\"cpu_peak_mcores\"], desc: true)\n  |> yield(name: \"pod_summary\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "filterable": true } },
+        "overrides": [
+        { "matcher": { "id": "byName", "options": "pod" }, "properties": [{ "id": "custom.width", "value": 320 }] },
+        { "matcher": { "id": "byName", "options": "cpu_peak_mcores" }, "properties": [{ "id": "unit", "value": "mcore" }, { "id": "custom.width", "value": 130 }] },
+        { "matcher": { "id": "byName", "options": "cpu_avg_mcores" }, "properties": [{ "id": "unit", "value": "mcore" }, { "id": "custom.width", "value": 130 }] },
+        { "matcher": { "id": "byName", "options": "mem_peak_mib" }, "properties": [{ "id": "unit", "value": "MiB" }, { "id": "custom.width", "value": 120 }] },
+        { "matcher": { "id": "byName", "options": "mem_avg_mib" }, "properties": [{ "id": "unit", "value": "MiB" }, { "id": "custom.width", "value": 120 }] }
+        ]
+      },
+      "options": { "showHeader": true, "footer": { "show": false }, "sortBy": [{ "displayName": "cpu_peak_mcores", "desc": true }] }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["ce-ai-lab", "utilization", "sizing"],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "type": "query",
+        "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"kube_metrics\", tag: \"namespace\")",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": "all",
+        "multi": false,
+        "current": { "selected": true, "text": "All", "value": "all" },
+        "hide": 0
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "CE AI Lab — Pod Resource Utilization",
+  "uid": "pod-resource-util",
+  "version": 1,
+  "weekStart": ""
+}
