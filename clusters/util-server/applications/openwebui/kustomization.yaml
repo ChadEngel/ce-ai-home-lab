@@ -146,10 +146,10 @@ spec:
               value: "1"
           resources:
             requests:
-              cpu: 200m
+              cpu: 500m
               memory: 1Gi
             limits:
-              cpu: "1"
+              cpu: "2"
               memory: 3Gi
           volumeMounts:
             - name: openwebui-data
