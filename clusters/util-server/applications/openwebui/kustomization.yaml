@@ -144,6 +144,21 @@ spec:
             # RAG settings to avoid slow embedding downloads on cold start
             - name: HF_HUB_OFFLINE
               value: "1"
+            # --- SQLite journal mode ------------------------------------------------
+            # Open WebUI defaults DATABASE_ENABLE_SQLITE_WAL=True, which runs
+            # `PRAGMA journal_mode=WAL` on every connection. WAL's win is concurrent
+            # readers-during-write — useless for a single uvicorn worker — and its
+            # `-shm` index is an mmap'd shared-memory file that is NOT safe on NFS
+            # (our webui.db lives on the nfs-client PVC). DELETE mode uses a plain
+            # rollback journal (regular file, NFS-safe) and the switch auto-
+            # checkpoints + removes the existing -wal/-shm files on next connect.
+            - name: DATABASE_ENABLE_SQLITE_WAL
+              value: "false"
+            # DELETE journal mode is only crash-safe with synchronous=FULL (NORMAL
+            # is safe only under WAL). Write rate is tiny (chat history), so the
+            # per-commit fsync is negligible. Keeps the DB integrity-safe on power loss.
+            - name: DATABASE_SQLITE_PRAGMA_SYNCHRONOUS
+              value: "FULL"
           resources:
             requests:
               cpu: 500m
