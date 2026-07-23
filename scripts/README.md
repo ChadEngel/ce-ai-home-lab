@@ -41,6 +41,7 @@ are available as K8s Secrets before any service that depends on them:
 | `deploy-openwebui.sh`  | Open WebUI chat interface       | https://ai.caehomelab.com |
 | `deploy-searxng.sh`    | SearXNG metasearch engine       | https://search.caehomelab.com |
 | `deploy-grafana.sh`    | Grafana + auto-provisioned dashboards | https://grafana.caehomelab.com |
+| `add-k3s-node.sh`       | Add a worker (agent) node to the cluster (secrets from Infisical) | (cluster node) |
 
 After deploying Bifrost, visit https://llm.caehomelab.com → **Settings →
 Providers** to add your LLM provider credentials (Ollama, OpenRouter,
@@ -70,6 +71,19 @@ etc.). Provider model names use the format `provider/model`, e.g.
 
 - **MCPo** — `ghcr.io/open-webui/mcpo` is not published as a stable image.
 - **Ollama** — runs on a separate host (`aiserver.home`); not in-cluster.
+
+## Adding cluster nodes
+
+See [`docs/how-to-add-k3s-node.md`](../docs/how-to-add-k3s-node.md). One-liner:
+
+```bash
+./scripts/add-k3s-node.sh caelx003   # secrets (LINUX_USER/LINUX_PVT_KEY/K3S_NODE_TOKEN) come from Infisical
+```
+
+The script auto-detects the server URL + k3s version, runs pre-flight over
+SSH, installs the agent pinned to the server's version, and waits for the
+node to go `Ready`. (Workers only — the single-server SQLite install can't
+accept a second control-plane server.)
 
 ## Troubleshooting
 
