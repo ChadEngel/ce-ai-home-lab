@@ -34,6 +34,13 @@ On the new node:
   `192.168.30.60`). Note: some homelab hosts resolve as a **bare** name
   (`caelx002`) but not with the `.home` suffix — use whichever resolves.
 
+> **`nfs-common` is installed automatically** by `add-k3s-node.sh` right
+> after pre-flight — the k3s agent install doesn't pull it in, and without it
+> any pod using the `nfs-client` StorageClass (Open WebUI, Grafana, …) fails
+> to mount with `mount: bad option; you might need a /sbin/mount.<type>`
+> helper. If the node has no internet, install it manually:
+> `sudo apt-get install -y nfs-common`.
+
 ## Add a node (one command)
 
 ```bash

@@ -135,6 +135,14 @@ case "$readyz" in
   *) die "$NODE_HOST cannot reach the API at $SERVER_URL (got: $readyz)" ;;
 esac
 
+# --- ensure the node can mount nfs-client PVCs (openwebui/grafana use NFS) ---
+# The k3s agent install does NOT pull in nfs-common; without it, any pod using
+# the nfs-client StorageClass fails to mount with: mount bad option; you might
+# need a /sbin/mount.<type> helper. Install it now so NFS pods can schedule.
+log "ensuring nfs-common on $NODE_HOST (needed for nfs-client PVCs) ..."
+nfs_ok="$("${SSH[@]}" 'sudo apt-get update -qq 2>/dev/null; sudo apt-get install -y -qq nfs-common >/dev/null 2>&1; command -v mount.nfs >/dev/null && echo ok || echo missing' 2>/dev/null || echo missing)"
+if [ "$nfs_ok" = "ok" ]; then ok "  nfs-common / mount.nfs ready"; else warn "  nfs-common install failed on $NODE_HOST -- NFS PVC pods will fail until: sudo apt-get install -y nfs-common"; fi
+
 # --- install the k3s agent --------------------------------------------------
 # Build the remote command with local vars ($K3S_VERSION/$SERVER_URL) expanded
 # and remote vars (\$T / \$(cat …)) kept literal, then pipe the token over stdin

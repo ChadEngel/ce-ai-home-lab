@@ -111,6 +111,22 @@ spec:
       labels:
         app: openwebui
     spec:
+      affinity:
+        nodeAffinity:
+          # Prefer the dedicated worker node (caelx002) so the control-plane
+          # node (util-server) stays free for cluster services; falls back to
+          # util-server if the worker is down. Uses the built-in
+          # kubernetes.io/hostname label, so no manual node labeling is needed.
+          # To PIN to the worker instead, switch preferred -> required and set
+          # operator: In (pod will go Pending if caelx002 is unavailable).
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - caelx002
       containers:
         - name: openwebui
           image: ghcr.io/open-webui/open-webui:v0.10.2
@@ -161,11 +177,11 @@ spec:
               value: "FULL"
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 1
+              memory: 2Gi
             limits:
-              cpu: "2"
-              memory: 3Gi
+              cpu: "3"
+              memory: 4Gi
           volumeMounts:
             - name: openwebui-data
               mountPath: /app/backend/data
