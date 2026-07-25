@@ -116,19 +116,40 @@ Bootstrapping order is **Infisical first, then the operator, then apps**
 Do **not** create `influxdb-secrets` or `cloudflare-dns-creds` manually on a
 cluster where the operator is running — it owns those Secrets.
 
+## Host & Proxmox monitoring
+
+Host-level metrics for the Linux boxes + the Proxmox host, into the existing
+InfluxDB v2 + Grafana stack. Full setup in
+[`docs/how-to-monitor-hosts.md`](docs/how-to-monitor-hosts.md).
+
+| Target | Method | Bucket | Status |
+|---|---|---|---|
+| `util-server` (k3s control-plane) | Telegraf (`install-telegraf.sh`) | `host_metrics` | ✅ writing (reconfigured: token off disk, bucket `mac_metrics`->`host_metrics`) |
+| `caelx002` (k3s worker) | Telegraf (`install-telegraf.sh`) | `host_metrics` | ✅ writing (fresh install, InfluxData repo + key) |
+| `caevmhost01` / 192.168.30.204 (Proxmox VE 9.2) | PVE native Metric Server | `proxmox_metrics` | ⏳ pending one-time PVE UI config (bucket exists; PVE not yet pushing) |
+| Grafana dashboard | `linux-host-overview.json` (9 panels, `host` variable) | `host_metrics` | ✅ loaded + query-verified via `/api/ds/query` |
+| Proxmox Grafana dashboard | TBD | `proxmox_metrics` | ⏳ build once PVE is pushing (introspect measurement names) |
+
+**Two-token model** (both in Infisical, no rotation needed to add buckets):
+- `INFLUXDB_TOKEN` — all-bucket **write** (Telegraf, k3s monitor, PVE metric server).
+- `INFLUXDB_READ_TOKEN` — all-bucket **read** (Grafana; synced into K8s Secret
+  `influxdb-secrets[INFLUX_TOKEN]` by the `influxdb-secrets-sync` InfisicalSecret
+  CR). The write token is write-only, so `install-telegraf.sh` verifies with
+  the read token (transiently over SSH stdin, never on disk).
+
 ## Outstanding work
 
 1. **Rotate the Cloudflare API token** — update the value in the Infisical
    UI (`secret-management`/`prod`/`CLOUDFLARE_API_TOKEN`); the operator
    syncs it into `cert-manager/cloudflare-dns-creds` within ~60s. (Also
    rotate at Cloudflare — the leaked token remains in git history.)
-2. **Rotate the InfluxDB admin token** — same flow: update
-   `INFLUXDB_TOKEN` in Infisical; the operator syncs `ai/influxdb-secrets`,
-   then restart Grafana. (Also rotate at the InfluxDB provider; the leaked
-   token remains in git history.)
-3. **Set up `monitor_k3s_health.sh` as a scheduled job** on `util-server`
-   so the Grafana dashboards have live data. No timer/cron is currently
-   configured.
+2. **Add the Proxmox metric server** (PVE UI, one-time) so `proxmox_metrics`
+   populates and the Proxmox Grafana dashboard can be built — see
+   `docs/how-to-monitor-hosts.md`. (The `PROXMOX_API_ID`/`PROXMOX_API_KEY`
+   token in Infisical lacks `Sys.Modify`, so this is a manual UI step.)
+3. **(Optional) Monitor `aiserver`** (the InfluxDB host itself) — one more
+   `./scripts/install-telegraf.sh aiserver.home` run; not in the original
+   2-boxes + Proxmox scope.
 4. **(Optional) Revoke the bootstrap service token** `st.51f02f1e-…` once
    you no longer need CLI administration; the operator uses the Machine
    Identity, not the service token.

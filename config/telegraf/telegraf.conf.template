@@ -1,0 +1,66 @@
+# Telegraf — host-level metrics -> InfluxDB v2 (aiserver.home).
+#
+# This is a TEMPLATE rendered by scripts/install-telegraf.sh:
+#   {{HOSTNAME}}        -> the target node's hostname (arg to the script)
+#   ${INFLUXDB_TOKEN}   -> left LITERAL; resolved at runtime by telegraf's own
+#                          env-var interpolation from /etc/telegraf/telegraf.env
+#                          (loaded via the telegraf.service.d/env.conf drop-in).
+#                          The token is therefore never written into this file
+#                          (which is 0644) — only into the 0600 env file.
+#
+# Bucket: host_metrics (create in InfluxDB UI, 30d retention).
+# Inputs kept to HOST-level only (cpu/mem/disk/net/system/processes/kernel/temp).
+# k3s cluster metrics are pushed separately by monitor_k3s_health.sh -> kube_metrics,
+# so we do NOT enable the kubernetes input here (avoids double-counting).
+
+[agent]
+  interval = "10s"
+  round_interval = true
+  metric_batch_size = 1000
+  metric_buffer_limit = 10000
+  collection_jitter = "0s"
+  flush_interval = "10s"
+  flush_jitter = "0s"
+  precision = ""
+  hostname = "{{HOSTNAME}}"
+  omit_hostname = false
+
+###############################################################################
+#                            OUTPUT PLUGINS                                   #
+###############################################################################
+
+[[outputs.influxdb_v2]]
+  urls = ["http://aiserver.home:8086"]
+  # Resolved at runtime from the environment (see header). NEVER hardcode here.
+  token = "${INFLUXDB_TOKEN}"
+  organization = "home"
+  bucket = "host_metrics"
+
+###############################################################################
+#                            INPUT PLUGINS                                    #
+###############################################################################
+
+[[inputs.cpu]]
+  percpu = true
+  totalcpu = true
+  collect_cpu_time = false
+  report_active = true
+
+[[inputs.mem]]
+
+[[inputs.disk]]
+  ignore_fs = ["tmpfs", "devtmpfs", "devfs", "iso9660", "overlay", "aufs", "squashfs"]
+
+[[inputs.diskio]]
+
+[[inputs.net]]
+
+[[inputs.system]]
+
+[[inputs.processes]]
+
+[[inputs.kernel]]
+
+# Temperature sensors. On systems with no /sys/class/hwmon or no sensors
+# exposed, this input simply emits nothing — safe to leave enabled.
+[[inputs.temp]]

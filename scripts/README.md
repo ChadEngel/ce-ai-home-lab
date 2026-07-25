@@ -42,6 +42,7 @@ are available as K8s Secrets before any service that depends on them:
 | `deploy-searxng.sh`    | SearXNG metasearch engine       | https://search.caehomelab.com |
 | `deploy-grafana.sh`    | Grafana + auto-provisioned dashboards | https://grafana.caehomelab.com |
 | `add-k3s-node.sh`       | Add a worker (agent) node to the cluster (secrets from Infisical) | (cluster node) |
+| `install-telegraf.sh`  | Install/configure Telegraf on a Linux box -> InfluxDB `host_metrics` | (host metrics) |
 
 After deploying Bifrost, visit https://llm.caehomelab.com → **Settings →
 Providers** to add your LLM provider credentials (Ollama, OpenRouter,
@@ -84,6 +85,21 @@ The script auto-detects the server URL + k3s version, runs pre-flight over
 SSH, installs the agent pinned to the server's version, and waits for the
 node to go `Ready`. (Workers only — the single-server SQLite install can't
 accept a second control-plane server.)
+
+## Monitoring hosts + Proxmox
+
+See [`docs/how-to-monitor-hosts.md`](../docs/how-to-monitor-hosts.md).
+
+```bash
+./scripts/install-telegraf.sh util-server   # host metrics -> InfluxDB host_metrics (idempotent)
+./scripts/install-telegraf.sh caelx002
+```
+
+Telegraf writes host-level metrics (cpu/mem/disk/net/load/temp) to InfluxDB
+`host_metrics` with the `INFLUXDB_TOKEN` (all-bucket write); Grafana reads via
+`INFLUXDB_READ_TOKEN` (all-bucket read, operator-synced into the cluster).
+Proxmox VE pushes to `proxmox_metrics` via its native Metric Server (UI
+one-time setup, documented in the runbook).
 
 ## Troubleshooting
 
