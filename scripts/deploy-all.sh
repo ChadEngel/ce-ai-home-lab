@@ -16,6 +16,7 @@
 #   4. openwebui          - Main AI interface (connects to bifrost-api on :8080)
 #   5. searxng            - Search engine
 #   6. grafana            - Monitoring dashboard (needs influxdb-secrets from Infisical)
+#   7. loki               - Log aggregation (Loki + Promtail syslog intake for the UDM)
 #
 # Note: MCPo is not deployed (no published Docker images yet)
 # Note: Ollama runs on separate server aiserver.home, not in Kubernetes
@@ -65,9 +66,23 @@ echo ">>> Step 5: Deploying SearXNG..."
 $SCRIPT_DIR/deploy-searxng.sh
 
 # Step 6: Deploy Grafana
+# (Loki is deployed after Grafana so the Loki datasource in Grafana's
+# provisioning ConfigMap has a live backend to health-check on first boot.)
 echo ""
 echo ">>> Step 6: Deploying Grafana..."
 $SCRIPT_DIR/deploy-grafana.sh
+
+# Step 7: Deploy Loki + Promtail (log aggregation; UDM syslog intake)
+echo ""
+echo ">>> Step 7: Deploying Loki + Promtail..."
+$SCRIPT_DIR/deploy-loki.sh
+
+# Grafana must be restarted so its datasource init container re-renders the
+# Loki entry (added to grafana-datasources ConfigMap) on a fresh pod boot.
+echo ""
+echo ">>> Restarting Grafana to pick up the Loki datasource..."
+kubectl -n "$NAMESPACE" rollout restart deployment/grafana
+kubectl -n "$NAMESPACE" rollout status deployment/grafana --timeout=180s
 
 echo ""
 echo "=============================================="
@@ -79,6 +94,7 @@ echo "  OpenWebUI:   https://ai.caehomelab.com"
 echo "  Bifrost API: https://llm.caehomelab.com  (configure providers via web UI)"
 echo "  Infisical:   https://secrets.caehomelab.com"
 echo "  Grafana:     https://grafana.caehomelab.com"
+echo "  Loki:        https://loki.caehomelab.com   (UDM syslog -> 192.168.30.217:30014 UDP, 15-day retention)"
 echo ""
 echo "Run './scripts/deployment-test.sh' to verify everything is healthy."
 echo ""

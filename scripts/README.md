@@ -41,6 +41,7 @@ are available as K8s Secrets before any service that depends on them:
 | `deploy-openwebui.sh`  | Open WebUI chat interface       | https://ai.caehomelab.com |
 | `deploy-searxng.sh`    | SearXNG metasearch engine       | https://search.caehomelab.com |
 | `deploy-grafana.sh`    | Grafana + auto-provisioned dashboards | https://grafana.caehomelab.com |
+| `deploy-loki.sh`       | Loki + Promtail (UDM syslog intake, 15-day retention); adds Loki datasource to Grafana | https://loki.caehomelab.com |
 | `add-k3s-node.sh`       | Add a worker (agent) node to the cluster (secrets from Infisical) | (cluster node) |
 | `install-telegraf.sh`  | Install/configure Telegraf on a Linux box -> InfluxDB `host_metrics` | (host metrics) |
 
@@ -66,6 +67,8 @@ etc.). Provider model names use the format `provider/model`, e.g.
 | SearXNG    | `http://searxng-api.ai.svc.cluster.local:8080` |
 | Infisical  | `http://infisical.ai.svc.cluster.local:3000` |
 | Grafana    | `http://grafana.ai.svc.cluster.local:3000` |
+| Loki       | `http://loki.ai.svc.cluster.local:3100` |
+| Promtail (syslog intake) | UDP NodePort `192.168.30.217:30014` -> `http://loki.ai.svc:3100` |
 | Ollama     | external — `http://aiserver.home:11434` |
 
 ## Not deployed

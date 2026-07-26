@@ -78,6 +78,17 @@ data:
         secureJsonData:
           # Grafana sends this as `Authorization: Token <token>` for Flux queries.
           token: ${INFLUX_TOKEN}
+      - name: Loki
+        type: loki
+        access: proxy
+        orgId: 1
+        uid: loki
+        url: http://loki.ai.svc.cluster.local:3100
+        editable: false
+        jsonData:
+          # Cap the number of lines returned per log query to keep the UI
+          # responsive when the UDM is chatty.
+          maxLines: 1000
 
 ---
 apiVersion: v1

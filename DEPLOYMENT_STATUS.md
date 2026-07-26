@@ -11,6 +11,7 @@ Last verified: 2026-07-18 (k3s `v1.35.5+k3s1` on `util-server`).
 | SearXNG    | `https://search.caehomelab.com` | ✅ Running | Settings mounted from `searxng-settings` ConfigMap |
 | Infisical  | `https://secrets.caehomelab.com` | ✅ Running | |
 | Grafana    | `https://grafana.caehomelab.com` | ✅ Running | Datasource connected to InfluxDB v2 on `aiserver.home:8086`; dashboards loaded |
+| Loki       | `https://loki.caehomelab.com` | ✅ Running | Log aggregation (Loki 3.7.4 single-binary, filesystem-on-NFS, 15-day retention); Promtail ingests UDM syslog via UDP NodePort `192.168.30.217:30014`; added as a Grafana datasource (uid `loki`) |
 | Ollama     | `http://aiserver.home:11434` | external | Runs on a separate host, not in this cluster |
 
 ## Certificates
@@ -22,6 +23,7 @@ All certificates are issued by Let's Encrypt via the Cloudflare DNS-01 solver:
 | `openwebui-tls`       | `ai.caehomelab.com`     | ✅ Ready |
 | `searxng-tls`         | `search.caehomelab.com` | ✅ Ready |
 | `bifrost-tls`         | `llm.caehomelab.com`    | ✅ Ready |
+| `loki-tls`           | `loki.caehomelab.com`   | ✅ Ready |
 | `infisical-ssl-certs` | `secrets.caehomelab.com` | ✅ Ready |
 | `grafana-tls`         | `grafana.caehomelab.com` | ✅ Ready |
 
@@ -126,7 +128,7 @@ InfluxDB v2 + Grafana stack. Full setup in
 |---|---|---|---|
 | `util-server` (k3s control-plane) | Telegraf (`install-telegraf.sh`) | `host_metrics` | ✅ writing (reconfigured: token off disk, bucket `mac_metrics`->`host_metrics`) |
 | `caelx002` (k3s worker) | Telegraf (`install-telegraf.sh`) | `host_metrics` | ✅ writing (fresh install, InfluxData repo + key) |
-| `caevmhost01` / 192.168.30.204 (Proxmox VE 9.2) | PVE native Metric Server | `proxmox_metrics` | ⏳ pending one-time PVE UI config (bucket exists; PVE not yet pushing) |
+| `caevmhost01` / 192.168.30.204 (Proxmox VE 9.2) | Telegraf on host (`SSH_USER=root ./scripts/install-telegraf.sh 192.168.30.204`) | `host_metrics` | ✅ writing (host=caevmhost01) — PVE native metric server was a dead end (no InfluxDB2.pm plugin; metric server never covers host disk/net/temp anyway) |
 | Grafana dashboard | `linux-host-overview.json` (9 panels, `host` variable) | `host_metrics` | ✅ loaded + query-verified via `/api/ds/query` |
 | Proxmox Grafana dashboard | TBD | `proxmox_metrics` | ⏳ build once PVE is pushing (introspect measurement names) |
 
@@ -137,16 +139,36 @@ InfluxDB v2 + Grafana stack. Full setup in
   CR). The write token is write-only, so `install-telegraf.sh` verifies with
   the read token (transiently over SSH stdin, never on disk).
 
+## Log aggregation (Loki + Promtail)
+
+UDM Pro syslog -> Loki, 15-day retention, queryable in Grafana.
+
+| Component | Detail |
+|---|---|
+| Loki | 3.7.4 single-binary, filesystem-on-NFS (`loki-pvc` 10Gi), `retention_period: 360h` (15d), compactor `retention_enabled: true` + `delete_request_store: filesystem` |
+| Promtail | 3.6.11 UDP syslog receiver on NodePort `192.168.30.217:30014` (UDP); pinned to `util-server` |
+| Ingress | `https://loki.caehomelab.com` (TLS via `letsencrypt-prod`, LAN-only) |
+| Grafana | Loki datasource (uid `loki`, internal `http://loki.ai.svc.cluster.local:3100`) — ✅ health OK |
+| UDM config | UniFi Network -> System Settings -> Advanced -> Syslog Server: host `192.168.30.217`, port `30014`, UDP |
+
+UDM syslog typically carries: firewall accept/deny, IDS/IPS (Suricata)
+alerts, auth/login, DHCP/DNS queries, wireless/AP events, system logs.
+
+To check what's flowing once the UDM is pointed:
+```bash
+kubectl -n ai exec -l app=loki -c loki -- wget -qO- 'http://localhost:3100/loki/api/v1/labels'
+kubectl -n ai logs -l app=promtail --tail=30
+```
+
 ## Outstanding work
 
 1. **Rotate the Cloudflare API token** — update the value in the Infisical
    UI (`secret-management`/`prod`/`CLOUDFLARE_API_TOKEN`); the operator
    syncs it into `cert-manager/cloudflare-dns-creds` within ~60s. (Also
    rotate at Cloudflare — the leaked token remains in git history.)
-2. **Add the Proxmox metric server** (PVE UI, one-time) so `proxmox_metrics`
-   populates and the Proxmox Grafana dashboard can be built — see
-   `docs/how-to-monitor-hosts.md`. (The `PROXMOX_API_ID`/`PROXMOX_API_KEY`
-   token in Infisical lacks `Sys.Modify`, so this is a manual UI step.)
+2. **Point the UDM Pro at Loki** — UniFi Network -> System Settings ->
+   Advanced -> Syslog Server: host `192.168.30.217`, port `30014`, UDP.
+   Then verify labels appear in Loki and build a UDM logs Grafana dashboard.
 3. **(Optional) Monitor `aiserver`** (the InfluxDB host itself) — one more
    `./scripts/install-telegraf.sh aiserver.home` run; not in the original
    2-boxes + Proxmox scope.
