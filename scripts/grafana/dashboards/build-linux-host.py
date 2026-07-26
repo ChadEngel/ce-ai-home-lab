@@ -4,13 +4,19 @@
 Telegraf host metrics -> InfluxDB v2 bucket `host_metrics`, queried with Flux
 through the existing influxdb datasource (uid dfdkew37wk1dse). Run install-
 telegraf.sh on each host to populate it. A `host` multi-select variable (All
-by default) filters every panel via `r.host =~ /${host:regex}/`.
+by default) filters every panel via `r.host =~ /${host:regex}/.
 
-Each target carries an explicit `legend` template so Grafana shows clean series
-labels (e.g. "util-server — cpu0") instead of the default full-group-key dump
-("usage_idle, cpu0, util-server, host_metrics"). Noisy telegraf tags are
-filtered: net -> physical NICs only, diskio -> whole disks only, disk ->
-exclude /sys/* pseudo-fs paths.
+Label convention: each query ends with `|> yield(name: "...")` and groups by
+friendly columns -- the yielded name + group key is what this Grafana InfluxDB
+plugin version uses for the series label. The query-level `legend` template
+field is NOT honored by this plugin version (it renders as `_value{groupkey}`),
+so we use the yield+group pattern that the unifi-network / pod-resource
+dashboards use. For net/diskio the raw _field (bytes_recv/bytes_sent,
+read_bytes/write_bytes) is mapped to a friendly `dir` column (RX/TX,
+Read/Write) before grouping, matching unifi's `dir` pattern.
+
+Noisy telegraf tags are filtered: net -> physical NICs only, diskio -> whole
+disks only, disk -> exclude /sys/* pseudo-fs paths.
 """
 import json, os
 
@@ -18,11 +24,12 @@ OUT = os.path.join(os.path.dirname(__file__), "linux-host-overview.json")
 DS = {"type": "influxdb", "uid": "dfdkew37wk1dse"}
 HOST_FILTER = 'r.host =~ /${host:regex}/'
 
+
 def flux(measurement, fields, extra="", where=""):
     """Build a Flux query string filtering measurement + field(s) + host.
 
     `where` is an extra predicate ANDed into the filter (e.g. interface filter).
-    `extra` is appended after the filter (e.g. map / derivative / group).
+    `extra` is appended after the filter (map / derivative / group / yield).
     """
     if isinstance(fields, str):
         fcond = f'r._field == "{fields}"'
@@ -38,17 +45,19 @@ def flux(measurement, fields, extra="", where=""):
     )
     if extra:
         q += extra + "\n"
-    return q
+    return q.rstrip("\n")
+
 
 def panel(pid, ptype, title, x, y, w, h, queries, unit=None, opts=None):
-    """queries: list of (refId, flux_str, legend_template)."""
+    """queries: list of (refId, flux_str). Each flux query MUST end with
+    `|> yield(name: "...")` -- that yielded name + the group() key is what
+    Grafana's InfluxDB Flux datasource uses for the series label."""
     p = {
         "id": pid, "type": ptype, "title": title,
         "gridPos": {"x": x, "y": y, "w": w, "h": h},
         "datasource": DS,
         "targets": [
-            {"refId": r[0], "query": r[1], "queryType": "flux",
-             "legend": r[2], "datasource": DS}
+            {"refId": r[0], "query": r[1], "queryType": "flux", "datasource": DS}
             for r in queries
         ],
         "fieldConfig": {"defaults": {}, "overrides": []},
@@ -58,6 +67,7 @@ def panel(pid, ptype, title, x, y, w, h, queries, unit=None, opts=None):
     if opts:
         p["options"] = opts
     return p
+
 
 # Physical NIC prefixes (enp/ens/eth/eno/wlan/wlp) -- drops docker/cni/flannel/veth/br noise
 NET_IFACE = 'r.interface =~ /^(enp|ens|eth|eno|wlan|wlp)/'
@@ -73,9 +83,9 @@ panels.append(panel(
     1, "timeseries", "CPU Usage % (per core)", 0, 0, 12, 8,
     [("A", flux("cpu", "usage_idle",
         '  |> map(fn: (r) => ({ r with _value: 100.0 - r._value }))\n'
+        '  |> group(columns: ["host", "cpu"])\n'
         '  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n'
-        '  |> group(columns: ["host", "cpu"])'),
-      "{{host}} — {{cpu}}")],
+        '  |> yield(name: "cpu_pct")'))],
     unit="percent",
     opts={"legend": {"displayMode": "table", "placement": "right"},
           "tooltip": {"mode": "multi", "sort": "desc"}}
@@ -85,9 +95,9 @@ panels.append(panel(
 panels.append(panel(
     2, "gauge", "Memory Used %", 12, 0, 6, 8,
     [("A", flux("mem", "used_percent",
+        '  |> group(columns: ["host"])\n'
         '  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n'
-        '  |> group(columns: ["host"])'),
-      "{{host}}")],
+        '  |> yield(name: "mem_pct")'))],
     unit="percent",
     opts={"reduceOptions": {"values": False, "calcs": ["lastNotNull"], "fields": ""}}
 ))
@@ -96,9 +106,9 @@ panels.append(panel(
 panels.append(panel(
     3, "stat", "Load Average (1/5/15)", 18, 0, 6, 8,
     [("A", flux("system", ["load1", "load5", "load15"],
+        '  |> group(columns: ["host", "_field"])\n'
         '  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n'
-        '  |> group(columns: ["host", "_field"])'),
-      "{{host}} {{_field}}")],
+        '  |> yield(name: "load")'))],
     unit="short",
     opts={"reduceOptions": {"values": False, "calcs": ["lastNotNull"], "fields": ""},
           "orientation": "horizontal"}
@@ -108,9 +118,9 @@ panels.append(panel(
 panels.append(panel(
     4, "timeseries", "Memory Usage", 0, 8, 12, 8,
     [("A", flux("mem", ["used", "available"],
+        '  |> group(columns: ["host", "_field"])\n'
         '  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n'
-        '  |> group(columns: ["host", "_field"])'),
-      "{{host}} — {{_field}}")],
+        '  |> yield(name: "mem")'))],
     unit="bytes",
     opts={"legend": {"displayMode": "table", "placement": "bottom"}}
 ))
@@ -119,37 +129,41 @@ panels.append(panel(
 panels.append(panel(
     5, "bargauge", "Disk Usage % (per mount)", 12, 8, 12, 8,
     [("A", flux("disk", "used_percent",
+        '  |> group(columns: ["host", "path"])\n'
         '  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n'
-        '  |> group(columns: ["host", "path"])',
-        where=DISK_PATH),
-      "{{host}} {{path}}")],
+        '  |> yield(name: "disk_pct")',
+        where=DISK_PATH))],
     unit="percent",
     opts={"reduceOptions": {"values": False, "calcs": ["lastNotNull"], "fields": ""},
           "orientation": "horizontal", "displayMode": "gradient"}
 ))
 
 # 6. Network throughput (bytes/sec, derivative) -- physical NICs only
+# map _field bytes_recv/bytes_sent -> friendly RX/TX (matches unifi `dir` pattern)
 panels.append(panel(
     6, "timeseries", "Network Throughput (physical NICs)", 0, 16, 12, 8,
     [("A", flux("net", ["bytes_recv", "bytes_sent"],
         '  |> derivative(unit: 1s, nonNegative: true)\n'
+        '  |> map(fn: (r) => ({ r with dir: if r._field == "bytes_recv" then "RX" else "TX" }))\n'
+        '  |> group(columns: ["host", "interface", "dir"])\n'
         '  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n'
-        '  |> group(columns: ["host", "interface", "_field"])',
-        where=NET_IFACE),
-      "{{host}} — {{interface}} {{_field}}")],
+        '  |> yield(name: "net")',
+        where=NET_IFACE))],
     unit="Bps",
     opts={"legend": {"displayMode": "table", "placement": "bottom"}}
 ))
 
 # 7. Disk I/O (bytes/sec, derivative) -- whole disks only
+# map _field read_bytes/write_bytes -> friendly Read/Write
 panels.append(panel(
     7, "timeseries", "Disk I/O (whole disks)", 12, 16, 12, 8,
     [("A", flux("diskio", ["read_bytes", "write_bytes"],
         '  |> derivative(unit: 1s, nonNegative: true)\n'
+        '  |> map(fn: (r) => ({ r with dir: if r._field == "read_bytes" then "Read" else "Write" }))\n'
+        '  |> group(columns: ["host", "name", "dir"])\n'
         '  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n'
-        '  |> group(columns: ["host", "name", "_field"])',
-        where=DISKIO_NAME),
-      "{{host}} — {{name}} {{_field}}")],
+        '  |> yield(name: "diskio")',
+        where=DISKIO_NAME))],
     unit="Bps",
     opts={"legend": {"displayMode": "table", "placement": "bottom"}}
 ))
@@ -158,9 +172,9 @@ panels.append(panel(
 panels.append(panel(
     8, "timeseries", "CPU Temperature", 0, 24, 12, 8,
     [("A", flux("temp", "temp",
+        '  |> group(columns: ["host", "sensor"])\n'
         '  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n'
-        '  |> group(columns: ["host", "sensor"])'),
-      "{{host}} — {{sensor}}")],
+        '  |> yield(name: "temp")'))],
     unit="celsius",
     opts={"legend": {"displayMode": "table", "placement": "bottom"}}
 ))
@@ -169,9 +183,9 @@ panels.append(panel(
 panels.append(panel(
     9, "stat", "Processes (total / zombies / sleeping)", 12, 24, 12, 8,
     [("A", flux("processes", ["total", "zombies", "sleeping"],
+        '  |> group(columns: ["host", "_field"])\n'
         '  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n'
-        '  |> group(columns: ["host", "_field"])'),
-      "{{host}} {{_field}}")],
+        '  |> yield(name: "proc")'))],
     unit="short",
     opts={"reduceOptions": {"values": False, "calcs": ["lastNotNull"], "fields": ""},
           "orientation": "horizontal"}
