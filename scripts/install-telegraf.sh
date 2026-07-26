@@ -12,7 +12,10 @@
 # `homelab-agent` Machine Identity, loaded by scripts/infisical-agent.sh):
 #
 #   LINUX_USER              SSH username (e.g. cengel)
-#   LINUX_PVT_KEY           SSH private key (raw PEM, or base64-encoded PEM)
+#   UTIL_SERVER_SSH_PRIVATE_KEY  canonical homelab-agent ed25519 key (base64 PEM)
+#                              -- authorized on every homelab box, referenced by
+#                              the SSH config + ce-pi-mac. Preferred.
+#   LINUX_PVT_KEY           fallback agent key (raw PEM, or base64-encoded PEM)
 #   INFLUXDB_TOKEN          all-bucket WRITE token (telegraf writes host_metrics)
 #   INFLUXDB_READ_TOKEN     all-bucket READ token (used ONLY here to verify data
 #                           landed; NOT written to disk on the node — the write
@@ -55,8 +58,22 @@ infisical_agent_token >/dev/null || die "Infisical agent not ready (run scripts/
 
 LINUX_USER="$(infs get LINUX_USER 2>/dev/null || true)"
 [ -n "$LINUX_USER" ] || die "LINUX_USER not found in Infisical"
-LPK="$(infs get LINUX_PVT_KEY 2>/dev/null || true)"
-[ -n "$LPK" ] || die "LINUX_PVT_KEY not found in Infisical"
+# Per-invocation SSH user override (defaults to Infisical LINUX_USER). Use this for
+# hosts that don't have the standard LINUX_USER unix account, e.g. Proxmox which
+# is managed as root:   SSH_USER=root ./scripts/install-telegraf.sh 192.168.30.204
+SSH_USER="${SSH_USER:-$LINUX_USER}"
+# Resolve the agent SSH private key. Prefer the canonical homelab-agent key
+# (UTIL_SERVER_SSH_PRIVATE_KEY, base64 PEM) -- authorized on every homelab box
+# and referenced by the SSH config + ce-pi-mac. Fall back to the older
+# LINUX_PVT_KEY for any box not yet migrated to the homelab-agent key.
+LPK="$(infs get UTIL_SERVER_SSH_PRIVATE_KEY 2>/dev/null || true)"
+KEY_SOURCE="UTIL_SERVER_SSH_PRIVATE_KEY"
+if [ -z "$LPK" ]; then
+  LPK="$(infs get LINUX_PVT_KEY 2>/dev/null || true)"
+  KEY_SOURCE="LINUX_PVT_KEY"
+fi
+[ -n "$LPK" ] || die "neither UTIL_SERVER_SSH_PRIVATE_KEY nor LINUX_PVT_KEY found in Infisical"
+log "  using agent key from $KEY_SOURCE"
 INFLUX_TOKEN="$(infs get INFLUXDB_TOKEN 2>/dev/null || true)"
 [ -n "$INFLUX_TOKEN" ] || die "INFLUXDB_TOKEN (write) not found in Infisical"
 INFLUX_READ_TOKEN="$(infs get INFLUXDB_READ_TOKEN 2>/dev/null || true)"
@@ -72,13 +89,13 @@ case "$LPK" in
     dec="$(printf '%s' "$LPK" | base64 -d 2>/dev/null || true)"
     case "$dec" in
       -----BEGIN*) printf '%s\n' "$dec" > "$KEYFILE" ;;             # base64 PEM
-      *) die "LINUX_PVT_KEY is neither raw PEM nor base64 PEM (first chars: $(printf '%s' "$LPK" | cut -c1-12)…)" ;;
+      *) die "$KEY_SOURCE is neither raw PEM nor base64 PEM (first chars: $(printf '%s' "$LPK" | cut -c1-12)…)" ;;
     esac ;;
 esac
 ssh-keygen -l -f "$KEYFILE" >/dev/null 2>&1 || die "materialized key is not a valid SSH private key"
 
 SSH=(ssh -i "$KEYFILE" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new
-     -o ConnectTimeout=10 "$LINUX_USER@$NODE_HOST")
+     -o ConnectTimeout=10 "$SSH_USER@$NODE_HOST")
 
 # --- pre-flight (heredoc-built remote script: clean nested quoting) ---------
 log "pre-flight on $NODE_HOST ..."
@@ -86,7 +103,8 @@ PF_SCRIPT="$(cat <<'EOF'
 echo "hostname=$(hostname)"
 echo "os=$(. /etc/os-release; echo $PRETTY_NAME)"
 echo "arch=$(uname -m)"
-if sudo -n true 2>/dev/null; then echo "sudo=OK"; else echo "sudo=NO"; fi
+echo "uid=$(id -u)"
+if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then echo "sudo=OK"; else echo "sudo=NO"; fi
 echo "apt=$(command -v apt-get || echo MISSING)"
 echo "influx=$(curl -s -o /dev/null -w %{http_code} -m 6 http://aiserver.home:8086/health 2>/dev/null || echo unreachable)"
 EOF
@@ -94,10 +112,14 @@ EOF
 PF_OUT="$("${SSH[@]}" 'bash -s' <<<"$PF_SCRIPT")"
 pf() { printf '%s\n' "$PF_OUT" | sed -n "s/^$1=//p"; }
 NODE_NAME="$(pf hostname)"; os="$(pf os)"; arch="$(pf arch)"
-sudo_v="$(pf sudo)"; apt_v="$(pf apt)"; influx_v="$(pf influx)"
+uid_v="$(pf uid)"; sudo_v="$(pf sudo)"; apt_v="$(pf apt)"; influx_v="$(pf influx)"
 
 log "  node:   $NODE_NAME ($os, $arch)"
-[ "$sudo_v" = "OK" ]      || die "passwordless sudo is required for $LINUX_USER on $NODE_HOST"
+# root (uid 0) needs no sudo; non-root needs passwordless sudo (verified above).
+# Minimal appliances like Proxmox don't ship sudo at all -- that's fine if root.
+if [ "$uid_v" != "0" ] && [ "$sudo_v" != "OK" ]; then
+  die "passwordless sudo is required for $SSH_USER on $NODE_HOST (or run as root)"
+fi
 [ "$apt_v" != "MISSING" ] || die "$NODE_HOST is not apt-based (this script targets Debian/Ubuntu)"
 case "$influx_v" in
   200) ok "  $NODE_HOST can reach InfluxDB (aiserver.home:8086, HTTP 200)" ;;
@@ -110,11 +132,19 @@ esac
 # set up the repo + install if telegraf isn't already present.
 INSTALL_SCRIPT="$(cat <<'EOF'
 set -e
+# Minimal appliances (e.g. Proxmox) may not ship sudo even when running as root.
+# Ensure sudo is present so the sudo-prefixed commands below work uniformly; this
+# only runs when sudo is missing (i.e. root on a minimal box) and executes as the
+# SSH user (root), no sudo prefix needed.
+if ! command -v sudo >/dev/null 2>&1; then
+  apt-get update -qq || true
+  apt-get install -y -qq sudo
+fi
 if ! command -v telegraf >/dev/null 2>&1; then
   sudo install -d -m 0755 /etc/apt/keyrings
   curl -fsSL https://repos.influxdata.com/influxdata-archive.key | sudo gpg --dearmor --yes -o /etc/apt/keyrings/influxdata-archive.gpg
   echo "deb [signed-by=/etc/apt/keyrings/influxdata-archive.gpg] https://repos.influxdata.com/debian stable main" | sudo tee /etc/apt/sources.list.d/influxdata.list >/dev/null
-  sudo apt-get update -qq
+  sudo apt-get update -qq || true
   sudo apt-get install -y -qq telegraf
 fi
 echo "  telegraf: $(command -v telegraf || echo MISSING)"
@@ -162,5 +192,5 @@ fi
 
 echo ""
 ok "telegraf configured on $NODE_NAME -> InfluxDB host_metrics"
-echo "  manage:    ssh $LINUX_USER@$NODE_HOST 'sudo systemctl status telegraf'"
-echo "  rotate:    infs set INFLUXDB_TOKEN=<new>; ./scripts/install-telegraf.sh $NODE_HOST"
+echo "  manage:    ssh $SSH_USER@$NODE_HOST 'sudo systemctl status telegraf'"
+echo "  rotate:    infs set INFLUXDB_TOKEN=<new>; SSH_USER=$SSH_USER ./scripts/install-telegraf.sh $NODE_HOST"
