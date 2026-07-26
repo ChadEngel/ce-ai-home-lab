@@ -56,7 +56,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"cpu\" and (r._field == \"usage_idle\") and r.host =~ /${host:regex}/)\n  |> map(fn: (r) => ({ r with _value: 100.0 - r._value }))\n  |> group(columns: [\"host\", \"cpu\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"cpu_pct\")",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"cpu\" and (r._field == \"usage_idle\") and r.host =~ /${host:regex}/)\n  |> map(fn: (r) => ({ r with _value: 100.0 - r._value }))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _label: r.host + \" \" + r.cpu }))\n  |> group(columns: [\"_label\"])\n  |> keep(columns: [\"_time\", \"_value\", \"_label\"])\n  |> yield(name: \"cpu_pct\")",
           "queryType": "flux",
           "datasource": {
             "type": "influxdb",
@@ -98,7 +98,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mem\" and (r._field == \"used_percent\") and r.host =~ /${host:regex}/)\n  |> group(columns: [\"host\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"mem_pct\")",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mem\" and (r._field == \"used_percent\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> map(fn: (r) => ({ r with _label: r.host }))\n  |> group(columns: [\"_label\"])\n  |> keep(columns: [\"_time\", \"_value\", \"_label\"])\n  |> yield(name: \"mem_pct\")",
           "queryType": "flux",
           "datasource": {
             "type": "influxdb",
@@ -139,7 +139,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and (r._field == \"load1\" or r._field == \"load5\" or r._field == \"load15\") and r.host =~ /${host:regex}/)\n  |> group(columns: [\"host\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"load\")",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and (r._field == \"load1\" or r._field == \"load5\" or r._field == \"load15\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> map(fn: (r) => ({ r with _label: r.host + \" \" + r._field }))\n  |> group(columns: [\"_label\"])\n  |> keep(columns: [\"_time\", \"_value\", \"_label\"])\n  |> yield(name: \"load\")",
           "queryType": "flux",
           "datasource": {
             "type": "influxdb",
@@ -181,7 +181,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mem\" and (r._field == \"used\" or r._field == \"available\") and r.host =~ /${host:regex}/)\n  |> group(columns: [\"host\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mem\")",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mem\" and (r._field == \"used\" or r._field == \"available\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _label: r.host + \" \" + r._field }))\n  |> group(columns: [\"_label\"])\n  |> keep(columns: [\"_time\", \"_value\", \"_label\"])\n  |> yield(name: \"mem\")",
           "queryType": "flux",
           "datasource": {
             "type": "influxdb",
@@ -219,7 +219,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"disk\" and (r._field == \"used_percent\") and r.host =~ /${host:regex}/ and r.path !~ /^\\/sys\\//)\n  |> group(columns: [\"host\", \"path\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"disk_pct\")",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"disk\" and (r._field == \"used_percent\") and r.host =~ /${host:regex}/ and r.path !~ /^\\/sys\\//)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> map(fn: (r) => ({ r with _label: r.host + \" \" + r.path }))\n  |> group(columns: [\"_label\"])\n  |> keep(columns: [\"_time\", \"_value\", \"_label\"])\n  |> yield(name: \"disk_pct\")",
           "queryType": "flux",
           "datasource": {
             "type": "influxdb",
@@ -262,7 +262,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"net\" and (r._field == \"bytes_recv\" or r._field == \"bytes_sent\") and r.host =~ /${host:regex}/ and r.interface =~ /^(enp|ens|eth|eno|wlan|wlp)/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with dir: if r._field == \"bytes_recv\" then \"RX\" else \"TX\" }))\n  |> group(columns: [\"host\", \"interface\", \"dir\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"net\")",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"net\" and (r._field == \"bytes_recv\" or r._field == \"bytes_sent\") and r.host =~ /${host:regex}/ and r.interface =~ /^(enp|ens|eth|eno|wlan|wlp)/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _label: r.host + \" \" + r.interface + \" \" + (if r._field == \"bytes_recv\" then \"RX\" else \"TX\") }))\n  |> group(columns: [\"_label\"])\n  |> keep(columns: [\"_time\", \"_value\", \"_label\"])\n  |> yield(name: \"net\")",
           "queryType": "flux",
           "datasource": {
             "type": "influxdb",
@@ -300,7 +300,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"diskio\" and (r._field == \"read_bytes\" or r._field == \"write_bytes\") and r.host =~ /${host:regex}/ and r.name =~ /^(nvme[0-9]+n[0-9]+|sd[a-z]|vd[a-z])$/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with dir: if r._field == \"read_bytes\" then \"Read\" else \"Write\" }))\n  |> group(columns: [\"host\", \"name\", \"dir\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"diskio\")",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"diskio\" and (r._field == \"read_bytes\" or r._field == \"write_bytes\") and r.host =~ /${host:regex}/ and r.name =~ /^(nvme[0-9]+n[0-9]+|sd[a-z]|vd[a-z])$/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _label: r.host + \" \" + r.name + \" \" + (if r._field == \"read_bytes\" then \"Read\" else \"Write\") }))\n  |> group(columns: [\"_label\"])\n  |> keep(columns: [\"_time\", \"_value\", \"_label\"])\n  |> yield(name: \"diskio\")",
           "queryType": "flux",
           "datasource": {
             "type": "influxdb",
@@ -338,7 +338,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"temp\" and (r._field == \"temp\") and r.host =~ /${host:regex}/)\n  |> group(columns: [\"host\", \"sensor\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"temp\")",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"temp\" and (r._field == \"temp\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> map(fn: (r) => ({ r with _label: r.host + \" \" + r.sensor }))\n  |> group(columns: [\"_label\"])\n  |> keep(columns: [\"_time\", \"_value\", \"_label\"])\n  |> yield(name: \"temp\")",
           "queryType": "flux",
           "datasource": {
             "type": "influxdb",
@@ -376,7 +376,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"processes\" and (r._field == \"total\" or r._field == \"zombies\" or r._field == \"sleeping\") and r.host =~ /${host:regex}/)\n  |> group(columns: [\"host\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"proc\")",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"processes\" and (r._field == \"total\" or r._field == \"zombies\" or r._field == \"sleeping\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> map(fn: (r) => ({ r with _label: r.host + \" \" + r._field }))\n  |> group(columns: [\"_label\"])\n  |> keep(columns: [\"_time\", \"_value\", \"_label\"])\n  |> yield(name: \"proc\")",
           "queryType": "flux",
           "datasource": {
             "type": "influxdb",
