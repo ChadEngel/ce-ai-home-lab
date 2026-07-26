@@ -134,6 +134,8 @@ spec:
       labels:
         app: loki
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: caelx002
       containers:
         - name: loki
           image: grafana/loki:3.7.4
@@ -166,11 +168,11 @@ spec:
               mountPath: /var/loki
           resources:
             requests:
-              cpu: 250m
-              memory: 384Mi
+              cpu: 100m
+              memory: 256Mi
             limits:
-              cpu: 1000m
-              memory: 1Gi
+              cpu: 500m
+              memory: 512Mi
       volumes:
         - name: config
           configMap:

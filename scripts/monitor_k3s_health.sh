@@ -26,6 +26,11 @@ INFLUX_BUCKET="${INFLUX_BUCKET:-kube_metrics}"
 TOKEN="${INFLUX_TOKEN:-}"
 
 # Fetch the token from Infisical if not provided in the environment.
+# Boot-race note: the systemd timer has Persistent=true, so it fires
+# immediately on boot -- which can race Infisical pod readiness for ~1-2
+# min after a node reboot. The retry loop below waits for Infisical instead
+# of failing fast (a single oneshot run of up to ~60s is fine; systemd timers
+# skip firing while the unit is still active, so no overlap).
 if [ -z "$TOKEN" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [ -f "$SCRIPT_DIR/infisical-agent.sh" ]; then
@@ -35,8 +40,17 @@ if [ -z "$TOKEN" ]; then
     fi
 fi
 
+# Retry with backoff if the first fetch came up empty (boot race).
 if [ -z "$TOKEN" ]; then
-    echo "[$(date '+%H:%M:%S')] INFLUX_TOKEN unavailable (env not set and Infisical fetch failed)" >&2
+    for attempt in 1 2 3 4 5 6; do
+        sleep 10
+        TOKEN="$(infs get INFLUXDB_TOKEN 2>/dev/null)" || TOKEN=""
+        [ -n "$TOKEN" ] && break
+    done
+fi
+
+if [ -z "$TOKEN" ]; then
+    echo "[$(date '+%H:%M:%S')] INFLUX_TOKEN unavailable (env not set and Infisical fetch failed after retries)" >&2
     exit 1
 fi
 

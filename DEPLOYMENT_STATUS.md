@@ -145,8 +145,8 @@ UDM Pro syslog -> Loki, 15-day retention, queryable in Grafana.
 
 | Component | Detail |
 |---|---|
-| Loki | 3.7.4 single-binary, filesystem-on-NFS (`loki-pvc` 10Gi), `retention_period: 360h` (15d), compactor `retention_enabled: true` + `delete_request_store: filesystem` |
-| Promtail | 3.6.11 UDP syslog receiver on NodePort `192.168.30.217:30014` (UDP); pinned to `util-server` |
+| Loki | 3.7.4 single-binary, filesystem-on-NFS (`loki-pvc` 10Gi), `retention_period: 360h` (15d), compactor `retention_enabled: true` + `delete_request_store: filesystem`; **pinned to `caelx002`** via `nodeSelector` (moved off util-server to relieve its memory pressure — util-server OOM'd with Loki stacked on the control plane); resources trimmed to 256Mi req / 512Mi lim |
+| Promtail | 3.6.11 UDP syslog receiver on NodePort `192.168.30.217:30014` (UDP); pinned to `util-server` (pushes to Loki via the in-cluster Service — works cross-node) |
 | Ingress | `https://loki.caehomelab.com` (TLS via `letsencrypt-prod`, LAN-only) |
 | Grafana | Loki datasource (uid `loki`, internal `http://loki.ai.svc.cluster.local:3100`) — ✅ health OK |
 | UDM config | UniFi Network -> System Settings -> Advanced -> Syslog Server: host `192.168.30.217`, port `30014`, UDP |
