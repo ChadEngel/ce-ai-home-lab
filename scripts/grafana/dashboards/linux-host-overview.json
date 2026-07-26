@@ -56,8 +56,9 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"cpu\" and (r._field == \"usage_idle\") and r.host =~ /${host:regex}/)\n  |> map(fn: (r) => ({ r with _value: 100.0 - r._value }))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"cpu\"])\n",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"cpu\" and (r._field == \"usage_idle\") and r.host =~ /${host:regex}/)\n  |> map(fn: (r) => ({ r with _value: 100.0 - r._value }))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"cpu\"])\n",
           "queryType": "flux",
+          "legend": "{{host}} \u2014 {{cpu}}",
           "datasource": {
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
@@ -98,8 +99,9 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mem\" and (r._field == \"used_percent\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mem\" and (r._field == \"used_percent\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> group(columns: [\"host\"])\n",
           "queryType": "flux",
+          "legend": "{{host}}",
           "datasource": {
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
@@ -139,8 +141,9 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and (r._field == \"load1\" or r._field == \"load5\" or r._field == \"load15\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> group(columns: [\"_field\"])\n",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and (r._field == \"load1\" or r._field == \"load5\" or r._field == \"load15\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> group(columns: [\"host\", \"_field\"])\n",
           "queryType": "flux",
+          "legend": "{{host}} {{_field}}",
           "datasource": {
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
@@ -181,8 +184,9 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mem\" and (r._field == \"used\" or r._field == \"available\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mem\" and (r._field == \"used\" or r._field == \"available\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"_field\"])\n",
           "queryType": "flux",
+          "legend": "{{host}} \u2014 {{_field}}",
           "datasource": {
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
@@ -219,8 +223,9 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"disk\" and (r._field == \"used_percent\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> group(columns: [\"path\"])\n",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"disk\" and (r._field == \"used_percent\") and r.host =~ /${host:regex}/ and r.path !~ /^\\/sys\\//)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> group(columns: [\"host\", \"path\"])\n",
           "queryType": "flux",
+          "legend": "{{host}} {{path}}",
           "datasource": {
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
@@ -248,7 +253,7 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Network Throughput",
+      "title": "Network Throughput (physical NICs)",
       "gridPos": {
         "x": 0,
         "y": 16,
@@ -262,8 +267,9 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"net\" and (r._field == \"bytes_recv\" or r._field == \"bytes_sent\") and r.host =~ /${host:regex}/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"net\" and (r._field == \"bytes_recv\" or r._field == \"bytes_sent\") and r.host =~ /${host:regex}/ and r.interface =~ /^(enp|ens|eth|eno|wlan|wlp)/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"interface\", \"_field\"])\n",
           "queryType": "flux",
+          "legend": "{{host}} \u2014 {{interface}} {{_field}}",
           "datasource": {
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
@@ -286,7 +292,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "Disk I/O",
+      "title": "Disk I/O (whole disks)",
       "gridPos": {
         "x": 12,
         "y": 16,
@@ -300,8 +306,9 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"diskio\" and (r._field == \"read_bytes\" or r._field == \"write_bytes\") and r.host =~ /${host:regex}/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"diskio\" and (r._field == \"read_bytes\" or r._field == \"write_bytes\") and r.host =~ /${host:regex}/ and r.name =~ /^(nvme[0-9]+n[0-9]+|sd[a-z]|vd[a-z])$/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"name\", \"_field\"])\n",
           "queryType": "flux",
+          "legend": "{{host}} \u2014 {{name}} {{_field}}",
           "datasource": {
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
@@ -338,8 +345,9 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"temp\" and (r._field == \"temp\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"temp\" and (r._field == \"temp\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> group(columns: [\"host\", \"sensor\"])\n",
           "queryType": "flux",
+          "legend": "{{host}} \u2014 {{sensor}}",
           "datasource": {
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
@@ -376,8 +384,9 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"processes\" and (r._field == \"total\" or r._field == \"zombies\" or r._field == \"sleeping\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> group(columns: [\"_field\"])\n",
+          "query": "from(bucket: \"host_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"processes\" and (r._field == \"total\" or r._field == \"zombies\" or r._field == \"sleeping\") and r.host =~ /${host:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> group(columns: [\"host\", \"_field\"])\n",
           "queryType": "flux",
+          "legend": "{{host}} {{_field}}",
           "datasource": {
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
