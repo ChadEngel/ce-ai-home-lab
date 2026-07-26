@@ -69,6 +69,68 @@ at `/var/lib/grafana/dashboards/default`.
     top-right time range to a representative window (e.g. a busy hour or a
     full day) before sizing. Sorted by CPU peak desc.
 
+- **`unifi-network.json`** — `CE AI Lab — UniFi Network (UDM Pro)`
+  Network dashboard backed by the InfluxDB v2 datasource (uid `dfdkew37wk1dse`)
+  querying the `network_metrics` bucket with **Flux**. Data is written by
+  **unpoller** (`clusters/util-server/applications/unpoller/`), a k8s
+  Deployment in the `ai` namespace that polls the UDM Pro controller
+  (`https://192.168.250.1`) every 30s using a UniFi OS API key and writes to
+  `network_metrics` with the write-only `INFLUXDB_TOKEN`.
+
+  Two templating variables: `$network` (VLAN/network name, regex match) and
+  `$ap` (access point name).
+
+  Panels:
+  - **WAN Bandwidth — Comcast & Verizon** — `usg_wan_ports` rx/tx byte
+    derivative × 8, grouped by WAN port (eth8 = Comcast active, eth9 =
+    Verizon failover) and direction. The headline internet throughput panel.
+  - **WAN Download / Upload — Now** — stat, current rate per WAN port.
+  - **VLAN Bandwidth — per network** — `usg_networks` rx/tx derivative × 8
+    per VLAN (Default 192.168.250.0/24, Infrastructure 192.168.30.0/24,
+    IP_Camera 192.168.4.0/24). `$network` filters.
+  - **VLAN Bandwidth — Now** (bar gauge) + **Active Clients per VLAN**
+    (`usg_networks.num_sta`).
+  - **UDM CPU & Memory**, **UDM Temperature** (°C), **Internet Speedtest**
+    (download/upload, Mbps → bps), **Load Average & Uplink Latency** — all
+    from the `usg` measurement.
+  - **AP Bandwidth** (`uap` rx/tx derivative) + **AP Client Count**
+    (`uap.num_sta`) per access point (Basement, Garage, Upstairs).
+  - **Wi-Fi Channel Utilization (%)** — `uap_radios.cu_total` per radio/band.
+  - **Wi-Fi Radios** table — channel, TX power, utilization, clients, retries
+    per radio (pivot of `uap_radios`).
+  - **Client Overview — bandwidth** table — top 30 clients by current rate
+    (`clients.bytes_r` × 8), with a `conn` column showing WiFi AP or Wired
+    switch/port. Wired and wireless clients have different tag schemas
+    (`ap_name` only exists for wireless; `sw_name`/`vlan` only for wired),
+    so this query uses a single field with an `exists`-based connection label
+    instead of a pivot.
+  - **Wireless Client Signal Quality** table — per wireless client: AP, RSSI,
+    signal (dBm), noise (dBm), satisfaction (%), TX retries; sorted worst
+    satisfaction first. Wireless-only so the pivot works.
+  - **Client Count — Wired vs Wireless** (stat) + **Top Clients by Bandwidth**
+    (bar gauge).
+
+  Notes: bandwidth panels derive from cumulative byte counters with
+  `derivative(unit: 1s, nonNegative: true)` then × 8 → bits/sec (Grafana unit
+  `bps`, auto-scales to Mbps/Gbps). `dpi_category`/`dpi_application` carry
+  only category/app ID→name mappings (no byte volumes in this unpoller
+  build), so there is no DPI bandwidth panel.
+
+  Panels:
+  - **Cluster CPU Usage** — sum of `cpu_millicores` across all pods per
+    scrape (instantaneous total pod CPU). Compare against node allocatable
+    (~4000 mcores) to see headroom.
+  - **Cluster Memory Usage (MiB)** — sum of `memory_kb` across all pods per
+    scrape. Compare against node allocatable (~4880 MiB).
+  - **Per-pod CPU over time** — one line per pod (`aggregateWindow` max).
+    Legend table shows last + max per pod; toggle pods to isolate bursts.
+  - **Per-pod Memory over time (MiB)** — one line per pod.
+  - **Peak & Avg per pod (selected time range)** — THE sizing table: for each
+    pod, peak + average CPU (mcores) and memory (MiB) over the selected
+    time range. Use Peak to set limits, Avg+Peak to set requests. Set the
+    top-right time range to a representative window (e.g. a busy hour or a
+    full day) before sizing. Sorted by CPU peak desc.
+
 ## Datasource requirements
 
 The dashboard hardcodes datasource uid `dfdkew37wk1dse`, which is the uid set

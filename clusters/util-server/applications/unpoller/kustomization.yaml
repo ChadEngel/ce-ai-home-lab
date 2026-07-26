@@ -1,0 +1,193 @@
+# unpoller — collects UniFi network metrics from the UDM Pro controller and
+# writes them to InfluxDB v2 bucket `network_metrics`. Restores the network
+# metrics feed that died when the UDM's on-box telegraf was wiped by a firmware
+# upgrade (UniFi OS wipes add-on packages on upgrade; running unpoller in k8s
+# survives firmware updates).
+#
+# Why in k8s (not on the UDM):
+#   UniFi OS removes manually-installed packages on every firmware upgrade, so
+#   any telegraf/poller installed on the UDM itself eventually vanishes. A k8s
+#   Deployment is independent of the UDM filesystem and keeps collecting across
+#   upgrades.
+#
+# Auth model:
+#   - UniFi controller: API KEY auth (UniFi OS API key), NOT username/password.
+#     The key lives in Infisical secret UDM_API_KEY. The bundled up.conf calls
+#     this "exclusive of user/pass auth" — we set api_key and leave user/pass
+#     unset.
+#   - InfluxDB v2: the WRITE-only InfluxDB token (Infisical INFLUXDB_TOKEN,
+#     scoped to kube_metrics + network_metrics). This is the SAME write token
+#     the metrics writer uses; Grafana's read token is separate and lives in
+#     influxdb-secrets, not here.
+#
+# How secrets get into the config:
+#   The unpoller image is distroless (no shell), so we can't run envsubst inside
+#   it. We mirror the Grafana pattern: an alpine initContainer renders up.conf
+#   from this ConfigMap template via envsubst (substituting ${INFLUXDB_TOKEN}
+#   and ${UDM_API_KEY} from env sourced from the `unpoller-secrets` K8s Secret),
+#   writing the rendered file into an emptyDir that the distroless unpoller
+#   container mounts read-only at /etc/unpoller. The unpoller-secrets Secret is
+#   synced from Infisical by the unpoller-secrets-sync InfisicalSecret CR in
+#   clusters/util-server/applications/infisical-operator/infisical-secrets-sync.yaml.
+#
+# Deploy: ./scripts/deploy-unpoller.sh
+# Verify: see MONITORING.md — query last() on network_metrics; timestamps should
+#         advance ~every 30s.
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unpoller-config-template
+  namespace: ai
+data:
+  # Placeholders ${INFLUXDB_TOKEN} and ${UDM_API_KEY} are substituted by the
+  # render-config initContainer (envsubst). Do NOT put real tokens here.
+  up.conf: |
+    # unpoller config for CE AI home lab — rendered from envsubst at pod start.
+    # See clusters/util-server/applications/unpoller/kustomization.yaml.
+
+    [poller]
+      debug = false
+      quiet = false
+      plugins = []
+
+    # Prometheus /metrics endpoint (handy for debugging; not scraped yet).
+    [prometheus]
+      disable = false
+      http_listen = "0.0.0.0:9130"
+      report_errors = false
+      dead_ports = false
+      interval = "60s"
+
+    # InfluxDB v2 output. org+bucket+token select the v2 client (the v1
+    # db/user/pass fields are intentionally omitted).
+    [influxdb]
+      disable = false
+      url  = "http://aiserver.home:8086"
+      org  = "home"
+      bucket = "network_metrics"
+      auth_token = "${INFLUXDB_TOKEN}"
+      verify_ssl = false
+      interval = "30s"
+      dead_ports = false
+
+    # UniFi controller = UDM Pro. API-key auth (exclusive of user/pass).
+    [unifi.defaults]
+      url = "https://192.168.250.1"
+      api_key = "${UDM_API_KEY}"
+      sites = ["default"]
+      verify_ssl = false
+      save_sites = true
+      hash_pii = false
+      save_dpi = false
+      save_ids = false
+      save_events = false
+      save_syslog = false
+      save_alarms = false
+      save_anomalies = false
+      save_rogue = false
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unpoller
+  namespace: ai
+spec:
+  type: ClusterIP
+  selector:
+    app: unpoller
+  ports:
+    - name: metrics
+      port: 9130
+      targetPort: 9130
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unpoller
+  namespace: ai
+  labels:
+    app: unpoller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unpoller
+  template:
+    metadata:
+      labels:
+        app: unpoller
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      # The distroless unpoller image has no shell; run as the image's user (0).
+      securityContext:
+        runAsNonRoot: false
+      initContainers:
+        - name: render-config
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              apk add --no-cache gettext >/dev/null
+              echo "Rendering up.conf from template (secrets redacted)..."
+              envsubst < /template/up.conf > /etc/unpoller/up.conf
+              # Sanity: refuse to start if either secret is empty (envsubst
+              # leaves missing vars as the empty string, which would 401).
+              grep -q 'auth_token = "$"' /etc/unpoller/up.conf && { echo "FATAL: INFLUXDB_TOKEN empty"; exit 1; } || true
+              grep -q 'api_key = "$"' /etc/unpoller/up.conf && { echo "FATAL: UDM_API_KEY empty"; exit 1; } || true
+              echo "Rendered up.conf OK (url/org/bucket present)."
+              grep -E '^(url|org|bucket|verify_ssl)' /etc/unpoller/up.conf | sed -E 's/auth_token.*/auth_token=***/; s/api_key.*/api_key=***/'
+          env:
+            - name: INFLUXDB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: unpoller-secrets
+                  key: INFLUXDB_TOKEN
+            - name: UDM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: unpoller-secrets
+                  key: UDM_API_KEY
+          volumeMounts:
+            - name: config-template
+              mountPath: /template
+              readOnly: true
+            - name: config-rendered
+              mountPath: /etc/unpoller
+      containers:
+        - name: unpoller
+          image: ghcr.io/unpoller/unpoller:latest
+          imagePullPolicy: IfNotPresent
+          args: ["--config=/etc/unpoller/up.conf"]
+          ports:
+            - containerPort: 9130
+              name: metrics
+          resources:
+            requests:
+              cpu: 25m
+              memory: 48Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+          livenessProbe:
+            exec:
+              command: ["/usr/bin/unpoller", "--health"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: config-rendered
+              mountPath: /etc/unpoller
+              readOnly: true
+      volumes:
+        - name: config-template
+          configMap:
+            name: unpoller-config-template
+        - name: config-rendered
+          emptyDir: {}

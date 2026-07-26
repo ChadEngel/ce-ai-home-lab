@@ -1,0 +1,1485 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "WAN / Internet",
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "WAN Bandwidth — Comcast (active) & Verizon (failover)",
+      "description": "Internet throughput from the UDM Pro WAN ports. Comcast = eth8 (public IP), Verizon = eth9 (failover). Derived from cumulative rx/tx byte counters × 8 = bits/sec.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg_wan_ports\" and (r._field == \"rx_bytes\" or r._field == \"tx_bytes\"))\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      wan: if r.ifname == \"eth8\" then \"Comcast\" else if r.ifname == \"eth9\" then \"Verizon\" else r.ifname,\n      dir: if r._field == \"rx_bytes\" then \"Download\" else \"Upload\" }))\n  |> group(columns: [\"wan\", \"dir\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"wan\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.wan} ${__field.labels.dir}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "WAN Download — Now",
+      "description": "Current download rate per WAN port (Comcast active, Verizon idle).",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg_wan_ports\" and r._field == \"rx_bytes\")\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      wan: if r.ifname == \"eth8\" then \"Comcast\" else if r.ifname == \"eth9\" then \"Verizon\" else r.ifname }))\n  |> group(columns: [\"wan\"])\n  |> last()\n  |> yield(name: \"dl\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.wan}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "WAN Upload — Now",
+      "description": "Current upload rate per WAN port.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg_wan_ports\" and r._field == \"tx_bytes\")\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      wan: if r.ifname == \"eth8\" then \"Comcast\" else if r.ifname == \"eth9\" then \"Verizon\" else r.ifname }))\n  |> group(columns: [\"wan\"])\n  |> last()\n  |> yield(name: \"ul\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.wan}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "VLANs / Networks",
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "VLAN Bandwidth — per network (Download / Upload)",
+      "description": "Per-VLAN throughput derived from usg_networks cumulative rx/tx byte counters × 8. Filter with the $network variable. Networks: Default (192.168.250.0/24), Infrastructure (192.168.30.0/24), IP_Camera (192.168.4.0/24).",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg_networks\" and (r._field == \"rx_bytes\" or r._field == \"tx_bytes\") and r.name =~ /$network/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      dir: if r._field == \"rx_bytes\" then \"Download\" else \"Upload\" }))\n  |> group(columns: [\"name\", \"dir\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"vlan\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.name} ${__field.labels.dir}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "bargauge",
+      "title": "VLAN Bandwidth — Now",
+      "description": "Current per-VLAN download/upload rate.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg_networks\" and (r._field == \"rx_bytes\" or r._field == \"tx_bytes\") and r.name =~ /$network/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      dir: if r._field == \"rx_bytes\" then \"Download\" else \"Upload\" }))\n  |> group(columns: [\"name\", \"dir\"])\n  |> last()\n  |> yield(name: \"vlan_now\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.name} ${__field.labels.dir}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Active Clients per VLAN",
+      "description": "usg_networks.num_sta — number of active clients on each VLAN.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg_networks\" and r._field == \"num_sta\" and r.name =~ /$network/)\n  |> group(columns: [\"name\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"vlan_clients\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Gateway (UDM Pro)",
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "UDM CPU & Memory",
+      "description": "usg.cpu and usg.mem (percent). The UDM Pro runs the UniFi Network controller + DPI + IDS/IPS.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg\" and (r._field == \"cpu\" or r._field == \"mem\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"udm_cm\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "UDM Temperature",
+      "description": "usg.temp_cpu / temp_phy / temp_local (°C). Watch for sustained high CPU temp.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg\" and (r._field == \"temp_cpu\" or r._field == \"temp_phy\" or r._field == \"temp_local\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"udm_temp\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Internet Speedtest (Download / Upload)",
+      "description": "usg.speedtest-status_xput_download / xput_upload (Mbps → bps). Sparse: only written when the controller runs a speedtest. Points are shown explicitly.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg\" and (r._field == \"speedtest-status_xput_download\" or r._field == \"speedtest-status_xput_upload\"))\n  |> map(fn: (r) => ({ r with _value: r._value * 1000000.0, dir: if r._field == \"speedtest-status_xput_download\" then \"Download\" else \"Upload\" }))\n  |> group(columns: [\"dir\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: true)\n  |> yield(name: \"speedtest\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": true,
+            "show": {
+              "line": true,
+              "points": true
+            }
+          },
+          "displayName": "${__field.labels.dir}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "UDM Load Average & Uplink Latency",
+      "description": "usg.loadavg_1/5/15 (1/5/15-min load) and usg.uplink_latency (ms, to the WAN gateway). Two y-scales: load on left, latency on right.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg\" and (r._field == \"loadavg_1\" or r._field == \"loadavg_5\" or r._field == \"loadavg_15\")\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"load\")"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg\" and r._field == \"uplink_latency\")\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"latency\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.name}"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Wi-Fi (Access Points)",
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "AP Bandwidth — per Access Point",
+      "description": "uap.rx_bytes / tx_bytes derivative × 8 per AP. Filter with $ap. APs: Basement, Garage, Upstairs.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 51
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"uap\" and (r._field == \"rx_bytes\" or r._field == \"tx_bytes\") and r.name =~ /$ap/)\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      dir: if r._field == \"rx_bytes\" then \"RX\" else \"TX\" }))\n  |> group(columns: [\"name\", \"dir\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"ap\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.name} ${__field.labels.dir}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "AP Client Count",
+      "description": "uap.num_sta — total clients per access point.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 51
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"uap\" and r._field == \"num_sta\" and r.name =~ /$ap/)\n  |> group(columns: [\"name\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"ap_clients\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Wi-Fi Channel Utilization (%)",
+      "description": "uap_radios.cu_total — per radio (wifi0=2.4GHz, wifi1/na=5GHz, wifi2/na=6GHz on WiFi6/7). High sustained utilization (>70%) hurts throughput; consider channel width / roaming tuning.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 59
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"uap_radios\" and r._field == \"cu_total\")\n  |> map(fn: (r) => ({ r with band: if r.radio == \"ng\" then \"2.4GHz\" else if r.radio == \"na\" then \"5GHz\" else r.radio }))\n  |> group(columns: [\"device_name\", \"band\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"cu\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "displayName": "${__field.labels.device_name} ${__field.labels.band}"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": ".*"
+            },
+            "properties": []
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Wi-Fi Radios — channel, power, utilization, clients",
+      "description": "Per-radio snapshot: channel (MHz), TX power (dBm), channel utilization (%), connected clients, TX retries (cumulative).",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 67
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -15m)\n  |> filter(fn: (r) => r._measurement == \"uap_radios\" and (r._field == \"channel\" or r._field == \"tx_power\" or r._field == \"cu_total\" or r._field == \"num_sta\" or r._field == \"tx_retries\"))\n  |> group(columns: [\"device_name\", \"radio\", \"_field\"])\n  |> last()\n  |> pivot(rowKey: [\"device_name\", \"radio\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with band: if r.radio == \"ng\" then \"2.4GHz\" else if r.radio == \"na\" then \"5/6GHz\" else r.radio }))\n  |> keep(columns: [\"device_name\", \"band\", \"channel\", \"tx_power\", \"cu_total\", \"num_sta\", \"tx_retries\"])\n  |> sort(columns: [\"device_name\", \"band\"])\n  |> yield(name: \"radios\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tx_power"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dBm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cu_total"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 85
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "channel"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "MHz"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "num_sta"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": []
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "bandwidth_bps",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "type": "row",
+      "title": "Clients",
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 73
+      },
+      "panels": []
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Client Overview — bandwidth (top 30)",
+      "description": "Per-client current rate (bytes_r × 8 = bps), sorted descending. conn = WiFi access point or Wired switch/port. Wired and wireless clients have different tag schemas, so this uses a single field (bytes_r) with a safe exists-based connection column.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 74
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -15m)\n  |> filter(fn: (r) => r._measurement == \"clients\" and r._field == \"bytes_r\")\n  |> map(fn: (r) => ({ r with conn: if exists r.ap_name then \"WiFi: \" + r.ap_name else if exists r.sw_name then \"Wired: \" + r.sw_name + \" p\" + r.sw_port else \"Wired\" }))\n  |> group(columns: [\"name\", \"mac\", \"is_wired\", \"conn\"])\n  |> last()\n  |> map(fn: (r) => ({ r with bandwidth_bps: float(v: r._value) * 8.0 }))\n  |> group()\n  |> sort(columns: [\"bandwidth_bps\"], desc: true)\n  |> limit(n: 30)\n  |> keep(columns: [\"name\", \"is_wired\", \"conn\", \"bandwidth_bps\"])\n  |> yield(name: \"clients\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bandwidth_bps"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bps"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "is_wired"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "true": {
+                        "text": "Wired",
+                        "color": "blue"
+                      },
+                      "false": {
+                        "text": "Wireless",
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "bandwidth_bps",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "Wireless Client Signal Quality",
+      "description": "Per wireless client: AP, RSSI, signal (dBm), noise (dBm), satisfaction (%), TX retries (cumulative). Sorted by satisfaction ascending (worst first). signal < -75 dBm or satisfaction < 90 is a candidate for closer AP / roaming review.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 82
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -15m)\n  |> filter(fn: (r) => r._measurement == \"clients\" and r.is_wired == \"false\" and (r._field == \"signal\" or r._field == \"noise\" or r._field == \"satisfaction\" or r._field == \"tx_retries\" or r._field == \"rssi\"))\n  |> map(fn: (r) => ({ r with ap_name: if exists r.ap_name then r.ap_name else \"\" }))\n  |> group(columns: [\"name\", \"mac\", \"ap_name\", \"_field\"])\n  |> last()\n  |> pivot(rowKey: [\"name\", \"ap_name\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"name\", \"ap_name\", \"rssi\", \"signal\", \"noise\", \"satisfaction\", \"tx_retries\"])\n  |> sort(columns: [\"satisfaction\"], desc: false)\n  |> limit(n: 50)\n  |> yield(name: \"sig\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "signal"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dBm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "noise"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dBm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "satisfaction"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 90
+                    },
+                    {
+                      "color": "green",
+                      "value": 95
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rssi"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "satisfaction",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Client Count — Wired vs Wireless",
+      "description": "Distinct clients seen in the last 5m, grouped by is_wired.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 90
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"clients\" and r._field == \"bytes_r\")\n  |> group(columns: [\"is_wired\", \"mac\"])\n  |> last()\n  |> group(columns: [\"is_wired\"])\n  |> count()\n  |> map(fn: (r) => ({ r with link: if r.is_wired == \"true\" then \"Wired\" else \"Wireless\" }))\n  |> group(columns: [\"link\"])\n  |> yield(name: \"cc\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.link}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 22,
+      "type": "bargauge",
+      "title": "Top Clients by Bandwidth — Now",
+      "description": "Highest per-client rate (max bytes_r × 8 over the window), top 10.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 90
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"clients\" and r._field == \"bytes_r\")\n  |> group(columns: [\"name\"])\n  |> max()\n  |> map(fn: (r) => ({ r with _value: float(v: r._value) * 8.0 }))\n  |> group()\n  |> sort(columns: [\"_value\"], desc: true)\n  |> limit(n: 10)\n  |> yield(name: \"top\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.labels.name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizWidth": 0,
+        "minVizHeight": 10
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "ce-ai-lab",
+    "network",
+    "unifi"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "network",
+        "type": "query",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "dfdkew37wk1dse"
+        },
+        "query": "from(bucket: \"network_metrics\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"usg_networks\")\n  |> keep(columns: [\"name\"])\n  |> group()\n  |> distinct(column: \"name\")",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ".*"
+        },
+        "hide": 0,
+        "definition": "usg_networks name"
+      },
+      {
+        "name": "ap",
+        "type": "query",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "dfdkew37wk1dse"
+        },
+        "query": "from(bucket: \"network_metrics\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"uap\")\n  |> keep(columns: [\"name\"])\n  |> group()\n  |> distinct(column: \"name\")",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ".*"
+        },
+        "hide": 0,
+        "definition": "uap name"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "CE AI Lab — UniFi Network (UDM Pro)",
+  "uid": "unifi-network",
+  "version": 3,
+  "weekStart": ""
+}
