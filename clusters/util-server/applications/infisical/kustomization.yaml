@@ -125,12 +125,15 @@ spec:
               port: 8080
             initialDelaySeconds: 60
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 5
+            timeoutSeconds: 3
           volumeMounts:
             - name: infisical-data
               mountPath: /var/fuse
@@ -265,7 +268,9 @@ spec:
                 - -U
                 - infisical
             initialDelaySeconds: 30
-            periodSeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
           readinessProbe:
             exec:
               command:
@@ -273,7 +278,8 @@ spec:
                 - -U
                 - infisical
             initialDelaySeconds: 10
-            periodSeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
       volumes:
         - name: infisical-db-data
           persistentVolumeClaim:
@@ -348,11 +354,14 @@ spec:
               command: ["redis-cli", "ping"]
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
           readinessProbe:
             exec:
               command: ["redis-cli", "ping"]
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 3
       volumes:
         - name: infisical-redis-data
           persistentVolumeClaim:
