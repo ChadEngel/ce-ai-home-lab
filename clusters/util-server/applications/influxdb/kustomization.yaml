@@ -1,0 +1,159 @@
+# InfluxDB v2 — time-series store for cluster/network/host metrics.
+#
+# Migrated from the bare-metal instance on aiserver.home (192.168.30.10,
+# InfluxDB v2.8.0) into k3s, pinned to the caelx002 worker node, with data on
+# the nfs-client storage class (NAS at 192.168.30.121).
+#
+# Org: `home`. Buckets: kube_metrics, network_metrics, host_metrics
+# (legacy mac_metrics). Tokens are managed in Infisical:
+#   INFLUXDB_TOKEN       — write (kube_metrics + network_metrics + host_metrics)
+#   INFLUXDB_READ_TOKEN  — read all buckets (Grafana)
+#
+# DATA MIGRATION: this manifest deploys an EMPTY instance. Historical data +
+# org/users/tokens are brought in with `influx backup` (on aiserver) →
+# `influx restore --full` (into this pod), which preserves the existing
+# Infisical tokens so writers only need a URL change at cutover. See
+# docs/migrate-influxdb-to-k8s.md and scripts/deploy-influxdb.sh.
+#
+# After migration, writers/readers point at:
+#   - in-cluster:  http://influxdb.ai.svc.cluster.local:8086  (Grafana, unpoller)
+#   - external:     https://influxdb.caehomelab.com            (telegraf on Macs,
+#                  k3s-metrics-push systemd) — requires a Cloudflare A record
+#                  for influxdb.caehomelab.com -> a traefik node IP.
+#
+# Centralized Telegraf configs for the Mac hosts are created in this InfluxDB
+# instance via the Telegraf API (/api/v2/telegrafs); the Macs fetch their
+# config from there so edits live in one place. See deploy-influxdb.sh.
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb
+  namespace: ai
+spec:
+  type: ClusterIP
+  selector:
+    app: influxdb
+  ports:
+    - port: 8086
+      targetPort: 8086
+      name: http
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: influxdb-data
+  namespace: ai
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      # NFS is thin-provisioned; this is a quota. Size is a placeholder until
+      # the aiserver data dir is measured — adjust after migration if needed.
+      storage: 50Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: influxdb
+  namespace: ai
+  labels:
+    app: influxdb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: influxdb
+  template:
+    metadata:
+      labels:
+        app: influxdb
+    spec:
+      # Pin to the dedicated worker node so the control-plane node
+      # (util-server) stays free for cluster services. Hard requirement: pod
+      # goes Pending if caelx002 is unavailable (no fallback).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - caelx002
+      containers:
+        - name: influxdb
+          # Pinned to match the source instance (2.8.0) so backup/restore is
+          # a same-version operation. Upgrade in place AFTER migration.
+          image: influxdb:2.8.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8086
+              name: http
+          env:
+            # Stop InfluxDB from printing the setup banner noise in logs and
+            # keep the data dir explicit (matches the PVC mountPath).
+            - name: INFLUXD_BOLT_PATH
+              value: /var/lib/influxdb2/influxd.bolt
+            - name: INFLUXD_ENGINE_PATH
+              value: /var/lib/influxdb2/engine
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8086
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8086
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: influxdb-data
+              mountPath: /var/lib/influxdb2
+      volumes:
+        - name: influxdb-data
+          persistentVolumeClaim:
+            claimName: influxdb-data
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: influxdb-ingress
+  namespace: ai
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - influxdb.caehomelab.com
+      secretName: influxdb-tls
+  rules:
+    - host: influxdb.caehomelab.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: influxdb
+                port:
+                  number: 8086

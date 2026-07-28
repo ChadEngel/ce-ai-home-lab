@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: influxdb-tls
+  namespace: ai
+spec:
+  secretName: influxdb-tls
+  duration: 2160h
+  renewBefore: 360h
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: "influxdb.caehomelab.com"
+  dnsNames:
+    - influxdb.caehomelab.com
