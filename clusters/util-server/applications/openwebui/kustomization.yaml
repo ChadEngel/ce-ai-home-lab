@@ -129,7 +129,7 @@ spec:
                       - caelx002
       containers:
         - name: openwebui
-          image: ghcr.io/open-webui/open-webui:v0.10.2
+          image: ghcr.io/open-webui/open-webui:v0.11.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
