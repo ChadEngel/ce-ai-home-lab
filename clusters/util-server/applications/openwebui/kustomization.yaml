@@ -103,6 +103,10 @@ metadata:
     app: openwebui
 spec:
   replicas: 1
+  # Recreate: SQLite (webui.db) on RWO PVC — never run two instances against
+  # the same DB file during a rollout surge.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: openwebui
@@ -129,7 +133,9 @@ spec:
                       - caelx002
       containers:
         - name: openwebui
-          image: ghcr.io/open-webui/open-webui:v0.11.0
+# Pinned to the version currently running in the cluster. Bump
+          # deliberately, not via re-apply.
+          image: ghcr.io/open-webui/open-webui:v0.11.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -182,6 +188,20 @@ spec:
             limits:
               cpu: "3"
               memory: 4Gi
+          # /health returns 200 without auth once the backend is up.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
           volumeMounts:
             - name: openwebui-data
               mountPath: /app/backend/data

@@ -29,6 +29,33 @@ All certificates are issued by Let's Encrypt via the Cloudflare DNS-01 solver:
 
 ## Recently fixed (this commit)
 
+- **InfluxDB rollout deadlock** — `replicas:1` + RWO PVC + default
+  RollingUpdate strategy meant `kubectl rollout restart` deadlocked: the new
+  pod can't take InfluxDB's bolt file lock while the old pod holds it, and the
+  old pod won't exit until the new one is ready (observed: 2 765 restarts over
+  10 days). All single-replica PVC-backed Deployments now use
+  `strategy: Recreate` (influxdb, grafana, loki, openwebui, searxng, bifrost,
+  infisical-db, infisical-redis).
+- **Floating image tags pinned** — grafana/bifrost/searxng/unpoller/infisical
+  ran `:latest` (bifrost with `imagePullPolicy: Always`), so any reschedule
+  could silently ship breaking changes. All digest-pinned to the running
+  builds; openwebui manifest corrected v0.10.2 → v0.11.0 to match live (was
+  about to downgrade on next apply).
+- **Missing health probes added** — openwebui + bifrost (`/health` HTTP),
+  searxng (tcpSocket; the old HTTP probe caused a restart loop when upstream
+  removed `/healthcheck`).
+- **Broken production overlay fixed** — `openwebui/kustomization-production.yaml`
+  had invalid YAML (`-op:` without space); still needs the base refactored into
+  buildable resources before it works (noted in-file).
+- **Live placeholder credentials documented** — audit confirmed Grafana
+  admin/admin and Infisical AUTH_SECRET/ENCRYPTION_KEY/PG password placeholders
+  are live. Rotation runbook: `docs/rotate-placeholder-credentials.md`
+  (LAN-only exposure; ENCRYPTION_KEY requires export→rotate→re-import).
+- **Script hygiene** — `set -euo pipefail` added to check-deployments.sh,
+  deployment-test.sh, debug-pods.sh.
+
+### Earlier fixes
+
 - **Grafana datasource auth** — the InfluxDB datasource wasn't passing
   the token (the `secureJsonData.token` path silently fails on this
   Grafana version). Switched to `basicAuth: true` with the token in

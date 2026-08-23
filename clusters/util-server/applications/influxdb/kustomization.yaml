@@ -66,6 +66,13 @@ metadata:
     app: influxdb
 spec:
   replicas: 1
+  # Recreate (not RollingUpdate): with replicas=1 on an RWO PVC holding a
+  # bolt file lock, a rolling update surges a second pod that can NEVER
+  # acquire the lock while the old pod runs -> deadlock + crash loop
+  # (observed 2026-08: 2765 restarts after `kubectl rollout restart`).
+  # Recreate terminates the old pod first so the new one gets the lock.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: influxdb

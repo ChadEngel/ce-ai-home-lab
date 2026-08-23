@@ -64,6 +64,10 @@ metadata:
     app: searxng
 spec:
   replicas: 1
+  # Recreate: sessions dir on RWO PVC; also avoids a double-bind of port 8080
+  # during a rolling-update surge.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: searxng
@@ -72,13 +76,31 @@ spec:
       labels:
         app: searxng
     spec:
+    spec:
       containers:
         - name: searxng
-          image: searxng/searxng:latest
+          # Digest-pinned 2026-08 to the running build (was :latest). SearXNG
+          # releases daily; pin and bump deliberately. To upgrade: pull the new
+          # digest, apply, verify search still works.
+          image: searxng/searxng@sha256:77b6ec55d5176fc47cfe91df5e182393133305358741d0c80ebbeec75ac39f99
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               name: http
+          # TCP probes only: the HTTP /healthcheck endpoint was removed
+          # upstream (404 -> restart loop); a socket check catches a hung/
+          # dead process without depending on app routes.
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 5
           volumeMounts:
             - name: config
               mountPath: /etc/searxng/settings.yml
@@ -92,9 +114,6 @@ spec:
             limits:
               cpu: 250m
               memory: 512Mi
-          # The image (SearXNG 2026.6.24+) no longer ships a /healthcheck
-          # endpoint — the liveness probe was failing with 404, which made
-          # Kubernetes kill the pod every minute. Readiness on / is enough.
       volumes:
         - name: config
           configMap:

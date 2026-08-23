@@ -1,6 +1,7 @@
 #!/bin/bash
 # Check the status of all deployed applications
 # Run from the repository root: ./scripts/check-deployments.sh
+set -euo pipefail
 
 set -u
 

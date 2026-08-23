@@ -46,6 +46,9 @@ metadata:
     app: bifrost
 spec:
   replicas: 1
+  # Recreate: single replica with config/state on RWO PVC.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: bifrost
@@ -56,11 +59,27 @@ spec:
     spec:
       containers:
         - name: bifrost
-          image: maximhq/bifrost:latest
-          imagePullPolicy: Always
+          # Digest-pinned 2026-08 to the running build (was :latest + Always,
+          # meaning any reschedule could silently ship breaking changes).
+          # To upgrade: retag, verify, then update tag+digest together.
+          image: maximhq/bifrost@sha256:ef8e686b3588884066ec3d0e57f3fc15136b11047ad94678adefe5a9573539af
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 5
           env:
             - name: PORT
               value: "8080"
