@@ -34,31 +34,48 @@ data:
     PORT = int(os.environ.get("PORT", "8080"))
     PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
 
-    def extract_text(body):
-        title = body.get("title")
-        message = body.get("message")
+    def classify(body):
+        # A Grafana webhook notification describes either a firing alert or a
+        # resolved one. Grafana sets status on each alert and on the top-level
+        # "state"/"status". Treat it as resolved if the top-level status says so
+        # or if every referenced alert is resolved.
+        top = body.get("status") or body.get("state") or ""
         alerts = body.get("alerts") or []
-        if not title:
-            title = (body.get("commonLabels") or {}).get("alertname") \
-                 or (body.get("groupLabels") or {}).get("alertname")
-        if not message and alerts:
-            msgs = []
-            for a in alerts[:5]:
-                an = a.get("annotations") or {}
-                lab = a.get("labels") or {}
-                s = a.get("status", "firing")
-                line = an.get("summary") or an.get("description") or lab.get("alertname")
-                msgs.append("[%s] %s" % (s, line))
-            message = "\n".join(msgs)
-        return (title or "Grafana alert", message or "")
+        if str(top).lower() in ("resolved", "ok", "normal"):
+            return "resolved"
+        if alerts and all(str(a.get("status", "")).lower() == "resolved" for a in alerts):
+            return "resolved"
+        return "firing"
 
-    def send_pushover(title, message):
-        data = urlencode({
+    def extract_text(body, status):
+        alerts = body.get("alerts") or []
+        # Pull the SoC value / summary from annotations if present.
+        annot = {}
+        if alerts:
+            annot = (alerts[0].get("annotations") or {})
+        summary = annot.get("summary") or annot.get("description") or ""
+
+        if status == "resolved":
+            title = "✅ UDM SoC back to normal"
+            msg = summary or "The UDM SoC temperature has dropped back below the alert threshold."
+        else:
+            title = "🚨 " + (body.get("title") or "UDM SoC temperature high")
+            msg = summary if summary else ((alerts[0].get("labels") or {}).get("alertname", "") if alerts else "")
+            msg = msg or "UDM SoC temperature exceeded the threshold."
+        return (title, msg)
+
+    def send_pushover(status, title, message):
+        if status == "resolved":
+            # Informational: normal priority, gentle sound.
+            params = {"priority": "0", "sound": "pushover"}
+        else:
+            # Emergency: high priority, siren.
+            params = {"priority": "1", "sound": "siren"}
+        data = urlencode(dict({
             "token": TOKEN, "user": USER,
             "title": title[:100], "message": message[:1000],
-            "priority": "1", "sound": "siren",
             "timestamp": str(int(time.time())),
-        }).encode()
+        }, **params)).encode()
         req = Request(PUSHOVER_URL, data=data, method="POST")
         try:
             with urlopen(req, timeout=15) as r:
@@ -89,10 +106,11 @@ data:
             if not (USER and TOKEN):
                 self._send(500, b'{"error":"pushover secrets not set"}')
                 return
-            title, message = extract_text(body)
-            sc = send_pushover(title, message)
+            status = classify(body)
+            title, message = extract_text(body, status)
+            sc = send_pushover(status, title, message)
             if sc == 200:
-                print("%s pushover sent: %s" % (time.strftime("%H:%M:%S"), title))
+                print("%s pushover sent [%s]: %s" % (time.strftime("%H:%M:%S"), status, title))
                 self._send(200, b'{"sent":true}')
             else:
                 print("%s pushover FAILED http=%s" % (time.strftime("%H:%M:%S"), sc))
@@ -143,7 +161,7 @@ spec:
         - name: bridge
           image: python:3.12-alpine
           imagePullPolicy: IfNotPresent
-          command: ["python", "/bridge/bridge.py"]
+          command: ["python", "-u", "/bridge/bridge.py"]
           ports:
             - containerPort: 8080
               name: http
