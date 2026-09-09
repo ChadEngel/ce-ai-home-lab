@@ -26,8 +26,8 @@
     {
       "id": 2,
       "type": "timeseries",
-      "title": "WAN Bandwidth — Comcast (active) & Verizon (failover)",
-      "description": "Internet throughput from the UDM Pro WAN ports. Comcast = eth8 (public IP), Verizon = eth9 (failover). Derived from cumulative rx/tx byte counters × 8 = bits/sec.",
+      "title": "WAN Bandwidth \u2014 Comcast (active) & Verizon (failover)",
+      "description": "Internet throughput from the UDM Pro WAN ports. Comcast = eth8 (public IP), Verizon = eth9 (failover). Derived from cumulative rx/tx byte counters \u00d7 8 = bits/sec.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -91,7 +91,7 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "WAN Download — Now",
+      "title": "WAN Download \u2014 Now",
       "description": "Current download rate per WAN port (Comcast active, Verizon idle).",
       "datasource": {
         "type": "influxdb",
@@ -155,7 +155,7 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "WAN Upload — Now",
+      "title": "WAN Upload \u2014 Now",
       "description": "Current upload rate per WAN port.",
       "datasource": {
         "type": "influxdb",
@@ -233,8 +233,8 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "VLAN Bandwidth — per network (Download / Upload)",
-      "description": "Per-VLAN throughput derived from usg_networks cumulative rx/tx byte counters × 8. Filter with the $network variable. Networks: Default (192.168.250.0/24), Infrastructure (192.168.30.0/24), IP_Camera (192.168.4.0/24).",
+      "title": "VLAN Bandwidth \u2014 per network (Download / Upload)",
+      "description": "Per-VLAN throughput derived from usg_networks cumulative rx/tx byte counters \u00d7 8. Filter with the $network variable. Networks: Default (192.168.250.0/24), Infrastructure (192.168.30.0/24), IP_Camera (192.168.4.0/24).",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -298,7 +298,7 @@
     {
       "id": 7,
       "type": "bargauge",
-      "title": "VLAN Bandwidth — Now",
+      "title": "VLAN Bandwidth \u2014 Now",
       "description": "Current per-VLAN download/upload rate.",
       "datasource": {
         "type": "influxdb",
@@ -361,7 +361,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "Active Clients per VLAN",
-      "description": "usg_networks.num_sta — number of active clients on each VLAN.",
+      "description": "usg_networks.num_sta \u2014 number of active clients on each VLAN.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -449,7 +449,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 42
       },
       "targets": [
         {
@@ -505,7 +505,7 @@
       "id": 11,
       "type": "timeseries",
       "title": "UDM Temperature",
-      "description": "usg.temp_cpu / temp_phy / temp_local (°C). Watch for sustained high CPU temp.",
+      "description": "UDM SoC (thermal_zone0) + board temps (\u00b0C). SoC comes from the SSH udm-thermal collector (unpoller API lacks it). Watch for sustained high SoC.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -513,7 +513,7 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
+        "x": 0,
         "y": 34
       },
       "targets": [
@@ -523,7 +523,15 @@
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
           },
-          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg\" and (r._field == \"temp_cpu\" or r._field == \"temp_phy\" or r._field == \"temp_local\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"udm_temp\")"
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"soc_temp_c\")\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"soc\")"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg\" and (r._field == \"temp_cpu\" or r._field == \"temp_phy\" or r._field == \"temp_local\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"usg\")"
         }
       ],
       "fieldConfig": {
@@ -548,7 +556,20 @@
           },
           "displayName": "${__field.name}"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "soc_temp_c"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SoC (zone0)"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -570,16 +591,16 @@
       "id": 12,
       "type": "timeseries",
       "title": "Internet Speedtest (Download / Upload)",
-      "description": "usg.speedtest-status_xput_download / xput_upload (Mbps → bps). Sparse: only written when the controller runs a speedtest. Points are shown explicitly.",
+      "description": "usg.speedtest-status_xput_download / xput_upload (Mbps \u2192 bps). Sparse: only written when the controller runs a speedtest. Points are shown explicitly.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
-        "y": 42
+        "y": 50
       },
       "targets": [
         {
@@ -727,15 +748,15 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 58
       },
       "panels": []
     },
     {
       "id": 15,
       "type": "timeseries",
-      "title": "AP Bandwidth — per Access Point",
-      "description": "uap.rx_bytes / tx_bytes derivative × 8 per AP. Filter with $ap. APs: Basement, Garage, Upstairs.",
+      "title": "AP Bandwidth \u2014 per Access Point",
+      "description": "uap.rx_bytes / tx_bytes derivative \u00d7 8 per AP. Filter with $ap. APs: Basement, Garage, Upstairs.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -744,7 +765,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 51
+        "y": 59
       },
       "targets": [
         {
@@ -800,7 +821,7 @@
       "id": 16,
       "type": "timeseries",
       "title": "AP Client Count",
-      "description": "uap.num_sta — total clients per access point.",
+      "description": "uap.num_sta \u2014 total clients per access point.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -809,7 +830,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 51
+        "y": 59
       },
       "targets": [
         {
@@ -865,7 +886,7 @@
       "id": 17,
       "type": "timeseries",
       "title": "Wi-Fi Channel Utilization (%)",
-      "description": "uap_radios.cu_total — per radio (wifi0=2.4GHz, wifi1/na=5GHz, wifi2/na=6GHz on WiFi6/7). High sustained utilization (>70%) hurts throughput; consider channel width / roaming tuning.",
+      "description": "uap_radios.cu_total \u2014 per radio (wifi0=2.4GHz, wifi1/na=5GHz, wifi2/na=6GHz on WiFi6/7). High sustained utilization (>70%) hurts throughput; consider channel width / roaming tuning.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -874,7 +895,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 59
+        "y": 67
       },
       "targets": [
         {
@@ -934,7 +955,7 @@
     {
       "id": 18,
       "type": "table",
-      "title": "Wi-Fi Radios — channel, power, utilization, clients",
+      "title": "Wi-Fi Radios \u2014 channel, power, utilization, clients",
       "description": "Per-radio snapshot: channel (MHz), TX power (dBm), channel utilization (%), connected clients, TX retries (cumulative).",
       "datasource": {
         "type": "influxdb",
@@ -944,7 +965,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 67
+        "y": 75
       },
       "targets": [
         {
@@ -1072,15 +1093,15 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 73
+        "y": 81
       },
       "panels": []
     },
     {
       "id": 20,
       "type": "table",
-      "title": "Client Overview — bandwidth (top 30)",
-      "description": "Per-client current rate (bytes_r × 8 = bps), sorted descending. conn = WiFi access point or Wired switch/port. Wired and wireless clients have different tag schemas, so this uses a single field (bytes_r) with a safe exists-based connection column.",
+      "title": "Client Overview \u2014 bandwidth (top 30)",
+      "description": "Per-client current rate (bytes_r \u00d7 8 = bps), sorted descending. conn = WiFi access point or Wired switch/port. Wired and wireless clients have different tag schemas, so this uses a single field (bytes_r) with a safe exists-based connection column.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -1089,7 +1110,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 74
+        "y": 82
       },
       "targets": [
         {
@@ -1190,7 +1211,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 82
+        "y": 90
       },
       "targets": [
         {
@@ -1294,7 +1315,7 @@
     {
       "id": 21,
       "type": "stat",
-      "title": "Client Count — Wired vs Wireless",
+      "title": "Client Count \u2014 Wired vs Wireless",
       "description": "Distinct clients seen in the last 5m, grouped by is_wired.",
       "datasource": {
         "type": "influxdb",
@@ -1304,7 +1325,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 90
+        "y": 98
       },
       "targets": [
         {
@@ -1358,8 +1379,8 @@
     {
       "id": 22,
       "type": "bargauge",
-      "title": "Top Clients by Bandwidth — Now",
-      "description": "Highest per-client rate (max bytes_r × 8 over the window), top 10.",
+      "title": "Top Clients by Bandwidth \u2014 Now",
+      "description": "Highest per-client rate (max bytes_r \u00d7 8 over the window), top 10.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -1368,7 +1389,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 90
+        "y": 98
       },
       "targets": [
         {
@@ -1417,6 +1438,105 @@
         "showUnfilled": true,
         "minVizWidth": 0,
         "minVizHeight": 10
+      }
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "UDM Fan Speed",
+      "description": "udm_thermal.fan1_rpm / fan2_rpm from the SSH udm-thermal collector (adt7475 hwmon). Correlate with UDM Temperature: Fan2 (exhaust) should ramp up as SoC rises.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and (r._field == \"fan1_rpm\" or r._field == \"fan2_rpm\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"fans\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "rpm",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "${__field.name}",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fan1_rpm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Fan1 (intake)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fan2_rpm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Fan2 (exhaust)"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     }
   ],
@@ -1478,7 +1598,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "CE AI Lab — UniFi Network (UDM Pro)",
+  "title": "CE AI Lab \u2014 UniFi Network (UDM Pro)",
   "uid": "unifi-network",
   "version": 3,
   "weekStart": ""

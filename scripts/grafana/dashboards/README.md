@@ -92,7 +92,17 @@ at `/var/lib/grafana/dashboards/default`.
     (`usg_networks.num_sta`).
   - **UDM CPU & Memory**, **UDM Temperature** (°C), **Internet Speedtest**
     (download/upload, Mbps → bps), **Load Average & Uplink Latency** — all
-    from the `usg` measurement.
+    from the `usg` measurement. The **UDM Temperature** panel graphs BOTH the
+    unpoller board temps (`usg` `temp_cpu`/`temp_phy`/`temp_local`, from the
+    UniFi controller API) AND the **SoC / `thermal_zone0`** line
+    (`udm_thermal` `soc_temp_c`), which unpoller can't see — it's read over
+    SSH sysfs by the `udm-thermal` collector
+    (`clusters/util-server/applications/udm-thermal/`). The SoC is the reading
+    that actually spikes under CPU load (observe ~65–75 °C during fan tests).
+  - **UDM Fan Speed** — a companion panel under the Gateway row graphing the
+    `udm_thermal` `fan1_rpm`/`fan2_rpm` (adt7475 hwmon) that the same
+    `udm-thermal` collector reads over SSH. Fan2 is the exhaust fan that
+    tracks SoC load; Fan1 is often idle (0 RPM) on the UDM Pro.
   - **AP Bandwidth** (`uap` rx/tx derivative) + **AP Client Count**
     (`uap.num_sta`) per access point (Basement, Garage, Upstairs).
   - **Wi-Fi Channel Utilization (%)** — `uap_radios.cu_total` per radio/band.

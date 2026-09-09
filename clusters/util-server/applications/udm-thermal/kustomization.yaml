@@ -1,0 +1,159 @@
+# udm-thermal — SSH-based collector for the UDM SoC thermal zone + fans.
+#
+# unpoller only captures the UniFi controller's board temps (temp_cpu / temp_phy
+# / temp_local) from the `temperatures[]` API. The reading that actually spikes
+# under load is the Linux kernel thermal zone (type=cpu-thermal / thermal_zone0),
+# which is ONLY reachable over SSH sysfs and is invisible to unpoller. That is
+# the gap this collector closes.
+#
+# Like unpoller it runs in k8s so it survives UDM firmware upgrades (UniFi OS
+# wipes on-box packages on upgrade). It SSHes in as root (password via sshpass)
+# every INTERVAL seconds, reads /sys/class/thermal/thermal_zone0/temp
+# (millidegrees) + fan RPM, and writes a `udm_thermal` measurement to the
+# `network_metrics` bucket using the SAME WRITE token unpoller uses.
+#
+# Auth model:
+#   - UDM SSH: root password in Infisical UDM_SSH_PASS, synced to K8s secret
+#     `udm-thermal-secrets` by an InfisicalSecret CR (unpoller-secrets-sync.yaml).
+#     sshpass reads it from $SSHPASS (never argv). Enable UDM SSH under
+#     Settings -> System -> Advanced -> SSH (sets the root password).
+#   - InfluxDB v2: the WRITE token (Infisical INFLUXDB_TOKEN) synced into the
+#     same `udm-thermal-secrets` secret. Do NOT reuse the read token here.
+#
+# Deploy: ./scripts/deploy-udm-thermal.sh
+# Verify: query last() on network_metrics, _measurement == "udm_thermal".
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: udm-thermal-poll
+  namespace: ai
+data:
+  poll.sh: |
+    #!/bin/sh
+    set -u
+    : "${UDM_SSH_PASS:?UDM_SSH_PASS unset}"
+    : "${INFLUXDB_TOKEN:?INFLUXDB_TOKEN unset}"
+    UDM_HOST="${UDM_HOST:?UDM_HOST unset}"
+    UDM_USER="${UDM_USER:-root}"
+    INFLUX_URL="${INFLUX_URL:?INFLUX_URL unset}"
+    INFLUX_ORG="${INFLUX_ORG:-home}"
+    INFLUX_BUCKET="${INFLUX_BUCKET:-network_metrics}"
+    INTERVAL="${INTERVAL:-15}"
+    MAC="${MAC:-0c:ea:14:4e:7a:95}"
+    export SSHPASS="$UDM_SSH_PASS"
+    SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o ConnectionAttempts=1 -o BatchMode=no -o LogLevel=ERROR"
+    post() {
+      curl -sS -X POST \
+        --data-binary "$1" \
+        "${INFLUX_URL}/api/v2/write?org=${INFLUX_ORG}&bucket=${INFLUX_BUCKET}&precision=s" \
+        -H "Authorization: Token ${INFLUXDB_TOKEN}" \
+        -o /dev/null -w '%{http_code}'
+    }
+    echo "udm-thermal collector starting: ${UDM_USER}@${UDM_HOST} interval=${INTERVAL}s bucket=${INFLUX_BUCKET}"
+    while true; do
+      ts="$(date +%s)"
+      soc_raw="$(sshpass -e ssh $SSH_OPTS "${UDM_USER}@${UDM_HOST}" 'cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null' 2>/dev/null || echo '')"
+      fan1="$(sshpass -e ssh $SSH_OPTS "${UDM_USER}@${UDM_HOST}" 'cat /sys/class/hwmon/hwmon0/device/fan1_input 2>/dev/null' 2>/dev/null || echo '')"
+      fan2="$(sshpass -e ssh $SSH_OPTS "${UDM_USER}@${UDM_HOST}" 'cat /sys/class/hwmon/hwmon0/device/fan2_input 2>/dev/null' 2>/dev/null || echo '')"
+      valid="yes"
+      for v in "$soc_raw" "$fan1" "$fan2"; do
+        case "$v" in
+          ''|*[!0-9]*) valid="no" ;;
+        esac
+      done
+      if [ "$valid" = "yes" ]; then
+        soc_c=$((soc_raw / 1000))
+        line="udm_thermal,mac=${MAC},host=${UDM_HOST} soc_temp_c=${soc_c},soc_temp_raw=${soc_raw},fan1_rpm=${fan1},fan2_rpm=${fan2} ${ts}"
+        code="$(post "$line")"
+        if [ "$code" = "204" ]; then
+          printf '%s  SoC=%dC  Fan1=%sRPM  Fan2=%sRPM  -> influx %s\n' "$(date '+%H:%M:%S')" "$soc_c" "$fan1" "$fan2" "$code"
+        else
+          echo "$(date '+%H:%M:%S') influx write failed http=$code"
+        fi
+      else
+        echo "$(date '+%H:%M:%S') bad reads (soc=${soc_raw} fan1=${fan1} fan2=${fan2}) — SSH/auth/host issue"
+      fi
+      sleep "$INTERVAL"
+    done
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: udm-thermal
+  namespace: ai
+  labels:
+    app: udm-thermal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: udm-thermal
+  template:
+    metadata:
+      labels:
+        app: udm-thermal
+    spec:
+      restartPolicy: Always
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        # Alpine image is writable, so the main container installs its own deps
+        # (curl + sshpass + ssh) at startup before launching the poller. A
+        # separate initContainer would NOT work here — its apk installs land in
+        # its own discarded layer, not this container's filesystem.
+        - name: udm-thermal
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              echo "[deps] apk add curl openssh-client sshpass..."
+              apk add --no-cache curl openssh-client sshpass >/dev/null
+              command -v sshpass ssh curl >/dev/null
+              echo "[deps] installed: $(command -v sshpass) $(command -v ssh) $(command -v curl)"
+              exec /bin/sh /etc/udm-thermal/poll.sh
+          env:
+            - name: UDM_SSH_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: udm-thermal-secrets
+                  key: UDM_SSH_PASS
+            - name: INFLUXDB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: udm-thermal-secrets
+                  key: INFLUXDB_TOKEN
+            - name: UDM_HOST
+              value: "192.168.250.1"
+            - name: UDM_USER
+              value: "root"
+            - name: INFLUX_URL
+              value: "http://aiserver.home:8086"
+            - name: INFLUX_ORG
+              value: "home"
+            - name: INFLUX_BUCKET
+              value: "network_metrics"
+            - name: INTERVAL
+              value: "15"
+            - name: MAC
+              value: "0c:ea:14:4e:7a:95"
+          volumeMounts:
+            - name: poll-script
+              mountPath: /etc/udm-thermal
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: poll-script
+          configMap:
+            name: udm-thermal-poll
+            defaultMode: 0755

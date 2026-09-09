@@ -139,6 +139,37 @@ Note: unpoller logs a non-fatal `integration .../firewall/zones ... 400`
 error every cycle on current UDM firmware — it's a controller API quirk
 and does not affect the rest of the collection.
 
+## udm-thermal (UDM SoC thermal zone + fans → network_metrics)
+
+The UniFi controller API that unpoller uses only exposes **board** temps
+(`temp_cpu`/`temp_phy`/`temp_local`). The reading that actually spikes under
+CPU load is the **SoC / Linux thermal zone** (`/sys/class/thermal/thermal_zone0`,
+type `cpu-thermal`), which is ONLY readable over SSH sysfs and is invisible to
+unpoller. The `udm-thermal` collector (`clusters/util-server/applications/`
+`udm-thermal/`) closes that gap: it runs in k8s (survives UDM firmware
+upgrades, same as unpoller) and every 15s SSHes to the UDM as root to read the
+thermal zone + fan RPM, then writes a `udm_thermal` measurement to the
+`network_metrics` bucket with fields `soc_temp_c`, `soc_temp_raw`, `fan1_rpm`,
+`fan2_rpm`.
+
+Secrets: `UDM_SSH_PASS` (UDM root SSH password) + `INFLUXDB_TOKEN` (write),
+synced from Infisical into the `udm-thermal-secrets` Secret by an
+InfisicalSecret CR (see `infisical-secrets-sync.yaml`). The password is passed
+to sshpass via `$SSHPASS` (never argv).
+
+**Prereqs (once):** enable SSH on the UDM (Settings → System → Advanced → SSH,
+set root password) and add `UDM_SSH_PASS` to Infisical (`caehomelab-v1q6` /
+`prod` / root).
+
+```bash
+./scripts/deploy-udm-thermal.sh
+```
+
+Verify a fresh SoC point lands (~15s): `kubectl logs -n ai -l app=udm-thermal
+--tail=5`, or query `_measurement == "udm_thermal"` in `network_metrics`. The
+`UDM Temperature` panel in `unifi-network.json` graphs `soc_temp_c` alongside
+the unpoller board temps.
+
 ## Dashboards
 
 - **CE AI Lab – Kubernetes Realtime View** (`ceai-k8s-influx-metrics`):

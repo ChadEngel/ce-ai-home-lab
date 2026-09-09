@@ -1,0 +1,182 @@
+# pushover-bridge — tiny webhook that relays Grafana alerts to Pushover.
+#
+# Grafana has no native Pushover integration, so its alerting can only reach
+# Pushover via a webhook. This app is that bridge: it listens on an in-cluster
+# ClusterIP (no ingress — Grafana reaches it over the pod network), receives
+# Grafana's alert webhook JSON, and POSTs a notification to
+# https://api.pushover.net/1/messages.json for iOS push.
+#
+# Everything is OUTBOUND (cluster -> api.pushover.net), so it works whether the
+# user is home or away, with no inbound exposure — matching the requirement.
+#
+# Secrets (env, from K8s secret `pushover-secrets`, synced from Infisical by
+# pushover-secrets-sync in infisical-secrets-sync.yaml):
+#   PUSHOVER_USER_KEY    your Pushover User Key
+#   PUSHOVER_API_TOKEN   a Pushover Application/API token
+#
+# Grafana contact point target: http://pushover-bridge:8080  (ClusterIP svc).
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pushover-bridge-py
+  namespace: ai
+data:
+  bridge.py: |
+    import json, os, time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.request import Request, urlopen
+    from urllib.parse import urlencode
+
+    USER = os.environ.get("PUSHOVER_USER_KEY", "")
+    TOKEN = os.environ.get("PUSHOVER_API_TOKEN", "")
+    PORT = int(os.environ.get("PORT", "8080"))
+    PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
+
+    def extract_text(body):
+        title = body.get("title")
+        message = body.get("message")
+        alerts = body.get("alerts") or []
+        if not title:
+            title = (body.get("commonLabels") or {}).get("alertname") \
+                 or (body.get("groupLabels") or {}).get("alertname")
+        if not message and alerts:
+            msgs = []
+            for a in alerts[:5]:
+                an = a.get("annotations") or {}
+                lab = a.get("labels") or {}
+                s = a.get("status", "firing")
+                line = an.get("summary") or an.get("description") or lab.get("alertname")
+                msgs.append("[%s] %s" % (s, line))
+            message = "\n".join(msgs)
+        return (title or "Grafana alert", message or "")
+
+    def send_pushover(title, message):
+        data = urlencode({
+            "token": TOKEN, "user": USER,
+            "title": title[:100], "message": message[:1000],
+            "priority": "1", "sound": "siren",
+            "timestamp": str(int(time.time())),
+        }).encode()
+        req = Request(PUSHOVER_URL, data=data, method="POST")
+        try:
+            with urlopen(req, timeout=15) as r:
+                return r.status
+        except Exception as e:
+            print("pushover error:", e)
+            return 502
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code, msg=b""):
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(msg)))
+            self.end_headers()
+            if msg:
+                self.wfile.write(msg)
+
+        def do_GET(self):
+            self._send(200, b'{"status":"ok"}')
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                body = json.loads(raw or b"{}")
+            except Exception:
+                body = {}
+            if not (USER and TOKEN):
+                self._send(500, b'{"error":"pushover secrets not set"}')
+                return
+            title, message = extract_text(body)
+            sc = send_pushover(title, message)
+            if sc == 200:
+                print("%s pushover sent: %s" % (time.strftime("%H:%M:%S"), title))
+                self._send(200, b'{"sent":true}')
+            else:
+                print("%s pushover FAILED http=%s" % (time.strftime("%H:%M:%S"), sc))
+                self._send(502, b'{"error":"pushover returned error"}')
+
+        def log_message(self, *args):
+            pass
+
+    ThreadingHTTPServer(("", PORT), Handler).serve_forever()
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pushover-bridge
+  namespace: ai
+spec:
+  type: ClusterIP
+  selector:
+    app: pushover-bridge
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pushover-bridge
+  namespace: ai
+  labels:
+    app: pushover-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pushover-bridge
+  template:
+    metadata:
+      labels:
+        app: pushover-bridge
+    spec:
+      restartPolicy: Always
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: bridge
+          image: python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/bridge/bridge.py"]
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PUSHOVER_USER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pushover-secrets
+                  key: PUSHOVER_USER_KEY
+            - name: PUSHOVER_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pushover-secrets
+                  key: PUSHOVER_API_TOKEN
+          volumeMounts:
+            - name: bridge-py
+              mountPath: /bridge
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+        - name: bridge-py
+          configMap:
+            name: pushover-bridge-py
+            defaultMode: 0444
