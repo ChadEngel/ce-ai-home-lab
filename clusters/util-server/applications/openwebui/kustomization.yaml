@@ -103,6 +103,10 @@ metadata:
     app: openwebui
 spec:
   replicas: 1
+  # Recreate: SQLite (webui.db) on RWO PVC — never run two instances against
+  # the same DB file during a rollout surge.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: openwebui
@@ -129,8 +133,13 @@ spec:
                       - caelx002
       containers:
         - name: openwebui
-          image: ghcr.io/open-webui/open-webui:v0.11.0
-          imagePullPolicy: IfNotPresent
+          # Track upstream releases: `latest` tag + Always pull. Pod restarts
+          # (or `kubectl rollout restart`) pick up the newest Open WebUI
+          # build — no deliberate version bumps needed. Trade-off: the
+          # running version can drift from git (whatever :latest was at last
+          # pod creation); check `ai.caehomelab.com` version in-app.
+          image: ghcr.io/open-webui/open-webui:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               name: http
@@ -182,6 +191,20 @@ spec:
             limits:
               cpu: "3"
               memory: 4Gi
+          # /health returns 200 without auth once the backend is up.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
           volumeMounts:
             - name: openwebui-data
               mountPath: /app/backend/data

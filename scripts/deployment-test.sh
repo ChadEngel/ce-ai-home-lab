@@ -2,6 +2,7 @@
 #
 # Deployment Test Script for ce-ai-home-lab
 # Verifies all components are deployed and functioning correctly
+set -euo pipefail
 #
 # Usage: ./scripts/deployment-test.sh [namespace] [options]
 #   namespace:   Target namespace (default: ai)

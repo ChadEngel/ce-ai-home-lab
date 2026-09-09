@@ -11,9 +11,16 @@ labels:
     includeTemplateLabels: true
 
 patches:
-  - patch: |
-      -op: replace
-      -path: /spec/replicas
-      -value: 2
+  # NOTE: this overlay is aspirational — the base `kustomization.yaml` is a
+  # plain multi-doc manifest applied with `kubectl apply -f` (it has no
+  # `resources:` field), so `kustomize build` cannot consume it yet. Fix the
+  # YAML here now so the overlay is correct once the base is split into
+  # buildable resource files. The patch below also lacked the space after
+  # `-` (parsed as keys "-op"/"-path"/"-value") — fixed 2026-08.
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
     target:
       kind: Deployment
+      name: openwebui

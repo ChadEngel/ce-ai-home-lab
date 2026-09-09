@@ -220,6 +220,10 @@ metadata:
     app: infisical-db
 spec:
   replicas: 1
+  # Recreate: single replica on RWO PVC (Postgres holds a data lock) — a
+  # RollingUpdate surge would deadlock exactly like influxdb did.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: infisical-db
@@ -323,6 +327,9 @@ metadata:
     app: infisical-redis
 spec:
   replicas: 1
+  # Recreate: single replica on RWO PVC (Redis AOF/RDB on PVC).
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: infisical-redis

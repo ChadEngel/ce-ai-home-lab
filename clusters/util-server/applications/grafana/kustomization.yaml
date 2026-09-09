@@ -74,7 +74,6 @@ data:
           organization: home
           defaultBucket: kube_metrics
           queryLanguage: flux
-          tlsSkipVerify: true
         secureJsonData:
           # Grafana sends this as `Authorization: Token <token>` for Flux queries.
           token: ${INFLUX_TOKEN}
@@ -147,6 +146,10 @@ metadata:
     app: grafana
 spec:
   replicas: 1
+  # Recreate: single replica with SQLite DB on RWO PVC — two concurrent
+  # grafana processes on the same DB file would risk corruption.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: grafana
@@ -182,7 +185,8 @@ spec:
               mountPath: /tmp
       containers:
         - name: grafana
-          image: grafana/grafana:latest
+          # Digest-pinned 2026-08 to the running build (was :latest).
+          image: grafana/grafana@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

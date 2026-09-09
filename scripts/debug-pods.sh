@@ -1,6 +1,7 @@
 #!/bin/bash
 # Debug script for diagnosing pod issues and cert-manager status
 # Run from the repository root: ./scripts/debug-pods.sh
+set -euo pipefail
 
 set -u
 

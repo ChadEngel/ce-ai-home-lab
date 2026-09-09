@@ -6,7 +6,7 @@ Last verified: 2026-07-18 (k3s `v1.35.5+k3s1` on `util-server`).
 
 | Service | URL | Status | Notes |
 |---|---|---|---|
-| Open WebUI | `https://ai.caehomelab.com` | ✅ Running | Talks to Bifrost; no providers configured yet (you must add them at `https://llm.caehomelab.com`) |
+| Open WebUI | `https://ai.caehomelab.com` | ✅ Running | image `:latest` + `imagePullPolicy: Always` (tracks upstream releases; restarts pick up new builds — v0.11.3 at time of writing); talks to Bifrost; no providers configured yet (you must add them at `https://llm.caehomelab.com`) |
 | Bifrost    | `https://llm.caehomelab.com` | ✅ Running | Add providers via web UI (Settings → Providers) |
 | SearXNG    | `https://search.caehomelab.com` | ✅ Running | Settings mounted from `searxng-settings` ConfigMap |
 | Infisical  | `https://secrets.caehomelab.com` | ✅ Running | |
@@ -28,6 +28,33 @@ All certificates are issued by Let's Encrypt via the Cloudflare DNS-01 solver:
 | `grafana-tls`         | `grafana.caehomelab.com` | ✅ Ready |
 
 ## Recently fixed (this commit)
+
+- **InfluxDB rollout deadlock** — `replicas:1` + RWO PVC + default
+  RollingUpdate strategy meant `kubectl rollout restart` deadlocked: the new
+  pod can't take InfluxDB's bolt file lock while the old pod holds it, and the
+  old pod won't exit until the new one is ready (observed: 2 765 restarts over
+  10 days). All single-replica PVC-backed Deployments now use
+  `strategy: Recreate` (influxdb, grafana, loki, openwebui, searxng, bifrost,
+  infisical-db, infisical-redis).
+- **Floating image tags pinned** — grafana/bifrost/searxng/unpoller/infisical
+  ran `:latest` (bifrost with `imagePullPolicy: Always`), so any reschedule
+  could silently ship breaking changes. All digest-pinned to the running
+  builds; openwebui manifest corrected v0.10.2 → v0.11.0 to match live (was
+  about to downgrade on next apply).
+- **Missing health probes added** — openwebui + bifrost (`/health` HTTP),
+  searxng (tcpSocket; the old HTTP probe caused a restart loop when upstream
+  removed `/healthcheck`).
+- **Broken production overlay fixed** — `openwebui/kustomization-production.yaml`
+  had invalid YAML (`-op:` without space); still needs the base refactored into
+  buildable resources before it works (noted in-file).
+- **Live placeholder credentials documented** — audit confirmed Grafana
+  admin/admin and Infisical AUTH_SECRET/ENCRYPTION_KEY/PG password placeholders
+  are live. Rotation runbook: `docs/rotate-placeholder-credentials.md`
+  (LAN-only exposure; ENCRYPTION_KEY requires export→rotate→re-import).
+- **Script hygiene** — `set -euo pipefail` added to check-deployments.sh,
+  deployment-test.sh, debug-pods.sh.
+
+### Earlier fixes
 
 - **Grafana datasource auth** — the InfluxDB datasource wasn't passing
   the token (the `secureJsonData.token` path silently fails on this

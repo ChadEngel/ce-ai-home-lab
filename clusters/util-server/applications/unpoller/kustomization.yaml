@@ -162,7 +162,8 @@ spec:
               mountPath: /etc/unpoller
       containers:
         - name: unpoller
-          image: ghcr.io/unpoller/unpoller:latest
+          # Digest-pinned 2026-08 to the running build (was :latest).
+          image: ghcr.io/unpoller/unpoller@sha256:e84e0fa3427548df4cc1f4e1922dd93fab5a67ae774b80b69e3a52041e88ef05
           imagePullPolicy: IfNotPresent
           args: ["--config=/etc/unpoller/up.conf"]
           ports:
