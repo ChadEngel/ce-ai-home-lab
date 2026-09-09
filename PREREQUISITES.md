@@ -238,10 +238,12 @@ Persistent volumes (all on NFS, `nfs-client` StorageClass):
    - Create repository: `ChadEngel/ce-ai-home-lab`
    - Clone locally: `git clone https://github.com/ChadEngel/ce-ai-home-lab.git`
 
-7. **[ ] Configure Tailscale**
-   - Install Tailscale on k3s node
-   - Enable subnet router for cluster access
-   - Verify connectivity to cluster IP range
+7. **[x] Configure Tailscale**
+   - Install Tailscale on k3s nodes (both `util-server` and `caelx002`)
+   - Enable HA subnet router for LAN access (`192.168.30.0/24`) —
+     see [`docs/tailscale-subnet-router.md`](./docs/tailscale-subnet-router.md)
+   - Cluster IP range intentionally NOT advertised (internal services stay
+     off the tailnet)
 
 8. **[ ] Generate secrets (for local setup)**
    - `JWT_SECRET`: 32-character random string

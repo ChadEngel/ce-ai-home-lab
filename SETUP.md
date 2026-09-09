@@ -8,6 +8,12 @@ Steps taken so far to get the lab up and running.
 
 Tailscale is set up to connect machines on the home network.
 
+Both k3s nodes (`util-server`, `caelx002`) run Tailscale as an **HA subnet
+router pair** advertising `192.168.30.0/24` — all `*.caehomelab.com` apps
+(and the rest of the LAN) are reachable from any tailnet device, with
+automatic failover. Full details:
+[`docs/tailscale-subnet-router.md`](./docs/tailscale-subnet-router.md).
+
 ---
 
 ## Ollama (AIbeast)
@@ -33,6 +39,8 @@ A Mac mini runs **VMware Fusion** with an **Ubuntu** guest in **bridged mode** n
 
 ## Open questions / TODO
 
-- [ ] Document Tailscale install and device list
+- [x] Document Tailscale install and device list
+  (subnet-router setup: [`docs/tailscale-subnet-router.md`](./docs/tailscale-subnet-router.md);
+  tailnet device list lives in the Tailscale admin console)
 - [ ] Document Ollama install and models on AIbeast
 - [ ] Document util-server VM setup (Fusion config, Ubuntu install, bridged networking details)
