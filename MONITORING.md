@@ -170,6 +170,30 @@ Verify a fresh SoC point lands (~15s): `kubectl logs -n ai -l app=udm-thermal
 `UDM Temperature` panel in `unifi-network.json` graphs `soc_temp_c` alongside
 the unpoller board temps.
 
+## UDM SoC alert (Grafana → Pushover → iPhone)
+
+When the UDM SoC (`udm_thermal.soc_temp_c`) is **>= 90 °C for 1 minute**, a
+Grafana alert fires and pushes a notification to the iPhone via Pushover.
+
+Pipeline: Grafana alert rule → webhook contact point `pushover-bridge` (a small
+in-cluster svc, `clusters/util-server/applications/pushover-bridge/`) →
+`api.pushover.net` → iOS push. Everything outbound, so it works whether you're
+home or away. Pushover keys (`PUSHOVER_USER_KEY` / `PUSHOVER_API_TOKEN`) are
+synced from Infisical by `pushover-secrets-sync`.
+
+The four alerting resources (folder `UDM Alerts`, contact point, notification
+policy, and the alert rule) are provisioned idempotently by:
+
+```bash
+./scripts/deploy-grafana-alerts.sh
+```
+
+The rule definition (the `query → reduce → threshold` data pipeline) is the
+source of truth at `scripts/grafana/alerts/udm-soc-high.json`. Edit that file
+and re-run the script to update the live rule. Grafana file provisioning only
+covers rules (not contact points/policies), so this script drives Grafana's
+provisioning API instead.
+
 ## Dashboards
 
 - **CE AI Lab – Kubernetes Realtime View** (`ceai-k8s-influx-metrics`):

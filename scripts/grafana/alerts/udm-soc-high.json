@@ -1,0 +1,70 @@
+{
+  "title": "UDM SoC temperature high",
+  "ruleGroup": "udm-thermal",
+  "folder": "UDM Alerts",
+  "for": "1m",
+  "noDataState": "OK",
+  "execErrState": "Error",
+  "condition": "C",
+  "data": [
+    {
+      "refId": "A",
+      "datasourceUid": "dfdkew37wk1dse",
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
+      "model": {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "dfdkew37wk1dse"
+        },
+        "intervalMs": 1000,
+        "maxDataPoints": 43200,
+        "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"soc_temp_c\")\n  |> aggregateWindow(every: 1m, fn: max, createEmpty: false)",
+        "refId": "A"
+      }
+    },
+    {
+      "refId": "B",
+      "datasourceUid": "__expr__",
+      "relativeTimeRange": {
+        "from": 0,
+        "to": 0
+      },
+      "model": {
+        "expression": "A",
+        "intervalMs": 1000,
+        "maxDataPoints": 43200,
+        "reducer": "last",
+        "refId": "B",
+        "type": "reduce"
+      }
+    },
+    {
+      "refId": "C",
+      "datasourceUid": "__expr__",
+      "relativeTimeRange": {
+        "from": 0,
+        "to": 0
+      },
+      "model": {
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [
+                90
+              ],
+              "type": "gte"
+            }
+          }
+        ],
+        "expression": "B",
+        "intervalMs": 1000,
+        "maxDataPoints": 43200,
+        "refId": "C",
+        "type": "threshold"
+      }
+    }
+  ]
+}
