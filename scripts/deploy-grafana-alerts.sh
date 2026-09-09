@@ -41,10 +41,13 @@ if [ -z "$CURL_POD" ]; then
 fi
 
 # api <METHOD> <PATH> [body-file]   -> prints response body to stdout
+# NOTE: body transmission needs `-i` on kubectl exec so stdin is forwarded to
+# curl's `--data @-`. Without `-i` the pipe is empty and Grafana sees an
+# (empty) body with no folderUID.
 api() {
   local method="$1" path="$2" body_file="${3:-}"
   if [ -n "$body_file" ]; then
-    kubectl exec -n "$NAMESPACE" "$CURL_POD" -- sh -c \
+    kubectl exec -i -n "$NAMESPACE" "$CURL_POD" -- sh -c \
       "curl -s -X $method -u '$AUTH' -H 'Content-Type: application/json' --data @- $GRAFANA$path" < "$body_file"
   else
     kubectl exec -n "$NAMESPACE" "$CURL_POD" -- sh -c \
@@ -54,23 +57,34 @@ api() {
 
 echo "=== Grafana alerting provisioning (via $CURL_POD) ==="
 
-# 1. Ensure folder "UDM Alerts" exists.
+# 1. Ensure folder "UDM Alerts" exists. Fetch to a temp file and parse from the
+#    file — piping the kubectl exec output through python in a command
+#    substitution was unreliable (stdout mangling), so we read from disk.
 create_folder() {
   kubectl exec -n "$NAMESPACE" "$CURL_POD" -- sh -c \
     "curl -s -X POST -u '$AUTH' -H 'Content-Type: application/json' --data '{\"title\":\"UDM Alerts\"}' $GRAFANA/api/folders" >/dev/null
 }
-FOLDER_JSON="$(api GET /api/folders)"
-if ! echo "$FOLDER_JSON" | grep -q '"UDM Alerts"'; then
+TMPDIR_L="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR_L"' EXIT
+kubectl exec -n "$NAMESPACE" "$CURL_POD" -- sh -c \
+  "curl -s -X GET -u '$AUTH' $GRAFANA/api/folders" 2>/dev/null > "$TMPDIR_L/folders.json"
+if ! grep -q '"UDM Alerts"' "$TMPDIR_L/folders.json"; then
   echo "[ ] creating folder 'UDM Alerts'"
   create_folder
-  FOLDER_JSON="$(api GET /api/folders)"
+  kubectl exec -n "$NAMESPACE" "$CURL_POD" -- sh -c \
+    "curl -s -X GET -u '$AUTH' $GRAFANA/api/folders" 2>/dev/null > "$TMPDIR_L/folders.json"
 fi
-FOLDER_UID="$(echo "$FOLDER_JSON" | python3 -c "
-import sys, json
-for f in json.load(sys.stdin):
+FOLDER_UID="$(python3 -c "
+import json
+for f in json.load(open('$TMPDIR_L/folders.json')):
     if f.get('title') == 'UDM Alerts':
         print(f['uid']); break
 ")"
+if [ -z "$FOLDER_UID" ]; then
+  echo "[⚠️] could not determine UDM Alerts folder uid" >&2
+  exit 1
+fi
+echo "[ok] folder 'UDM Alerts' uid=$FOLDER_UID"
 
 # 2. Ensure contact point "pushover-bridge" exists.
 CP="$(api GET /api/v1/provisioning/contact-points)"
@@ -109,19 +123,27 @@ json.dump({
 PYEOF
 
 EXISTING="$(api GET /api/v1/provisioning/alert-rules)"
-RULE_UID="$(echo "$EXISTING" | python3 -c "
-import sys, json
-for r in json.load(sys.stdin):
+echo "$EXISTING" > "$TMPDIR_L/rules.json"
+RULE_UID="$(python3 -c "
+import json
+for r in json.load(open('$TMPDIR_L/rules.json')):
     if r.get('title') == 'UDM SoC temperature high':
         print(r['uid']); break
 ")"
 if [ -n "$RULE_UID" ]; then
   echo "[ ] updating rule '$RULE_UID'"
-  api PUT "/api/v1/provisioning/alert-rules/$RULE_UID" /tmp/udm_rule_payload.json >/dev/null
+  RESP="$(api PUT "/api/v1/provisioning/alert-rules/$RULE_UID" /tmp/udm_rule_payload.json)"
 else
   echo "[ ] creating rule"
-  api POST /api/v1/provisioning/alert-rules /tmp/udm_rule_payload.json >/dev/null
+  RESP="$(api POST /api/v1/provisioning/alert-rules /tmp/udm_rule_payload.json)"
 fi
 rm -f /tmp/udm_rule_payload.json
+# The provisioning API returns the stored rule JSON on success; an error comes
+# back as an object with a "message". Verify we got a real rule (has a "uid").
+if ! echo "$RESP" | grep -q '"uid"'; then
+  echo "[⚠️] rule upsert did not return a uid; API said: $RESP" >&2
+  exit 1
+fi
+echo "[✅] rule upserted: $(echo "$RESP" | grep -o '"title":"[^"]*"' | head -1)"
 
 echo "[✅] provisioning complete: 'UDM SoC temperature high' (SoC >= 90C for 1m) -> pushover"
