@@ -6,7 +6,7 @@ Last verified: 2026-07-18 (k3s `v1.35.5+k3s1` on `util-server`).
 
 | Service | URL | Status | Notes |
 |---|---|---|---|
-| Open WebUI | `https://ai.caehomelab.com` | ✅ Running | Talks to Bifrost; no providers configured yet (you must add them at `https://llm.caehomelab.com`) |
+| Open WebUI | `https://ai.caehomelab.com` | ✅ Running | image `:latest` + `imagePullPolicy: Always` (tracks upstream releases; restarts pick up new builds — v0.11.3 at time of writing); talks to Bifrost; no providers configured yet (you must add them at `https://llm.caehomelab.com`) |
 | Bifrost    | `https://llm.caehomelab.com` | ✅ Running | Add providers via web UI (Settings → Providers) |
 | SearXNG    | `https://search.caehomelab.com` | ✅ Running | Settings mounted from `searxng-settings` ConfigMap |
 | Infisical  | `https://secrets.caehomelab.com` | ✅ Running | |

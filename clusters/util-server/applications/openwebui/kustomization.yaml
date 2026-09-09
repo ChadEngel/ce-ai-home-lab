@@ -133,10 +133,13 @@ spec:
                       - caelx002
       containers:
         - name: openwebui
-# Pinned to the version currently running in the cluster. Bump
-          # deliberately, not via re-apply.
-          image: ghcr.io/open-webui/open-webui:v0.11.1
-          imagePullPolicy: IfNotPresent
+          # Track upstream releases: `latest` tag + Always pull. Pod restarts
+          # (or `kubectl rollout restart`) pick up the newest Open WebUI
+          # build — no deliberate version bumps needed. Trade-off: the
+          # running version can drift from git (whatever :latest was at last
+          # pod creation); check `ai.caehomelab.com` version in-app.
+          image: ghcr.io/open-webui/open-webui:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               name: http
