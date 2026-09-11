@@ -102,7 +102,13 @@ at `/var/lib/grafana/dashboards/default`.
   - **UDM Fan Speed** — a companion panel under the Gateway row graphing the
     `udm_thermal` `fan1_rpm`/`fan2_rpm` (adt7475 hwmon) that the same
     `udm-thermal` collector reads over SSH. Fan2 is the exhaust fan that
-    tracks SoC load; Fan1 is often idle (0 RPM) on the UDM Pro.
+    tracks SoC load; Fan1 is often idle (0 RPM) on the UDM Pro. The **UDM CPU &
+    Memory** panel also plots `udm_thermal.mem_used_pct`, and **UDM Load
+    Average** plots `udm_thermal.load1`, so temp/memory/load line up.
+  - **UDM Health & Reboots** row — **UDM Uptime / Reboots** (`udm_thermal.
+    uptime_s`; a sawtooth reset = reboot) and **UDM Reachability**
+    (`udm_thermal.up`; 1 reachable / 0 unreachable). These make every shutdown
+    visible and are the panels to read when the offline/reboot alerts fire.
   - **AP Bandwidth** (`uap` rx/tx derivative) + **AP Client Count**
     (`uap.num_sta`) per access point (Basement, Garage, Upstairs).
   - **Wi-Fi Channel Utilization (%)** — `uap_radios.cu_total` per radio/band.

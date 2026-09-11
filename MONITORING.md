@@ -148,9 +148,18 @@ type `cpu-thermal`), which is ONLY readable over SSH sysfs and is invisible to
 unpoller. The `udm-thermal` collector (`clusters/util-server/applications/`
 `udm-thermal/`) closes that gap: it runs in k8s (survives UDM firmware
 upgrades, same as unpoller) and every 15s SSHes to the UDM as root to read the
-thermal zone + fan RPM, then writes a `udm_thermal` measurement to the
-`network_metrics` bucket with fields `soc_temp_c`, `soc_temp_raw`, `fan1_rpm`,
-`fan2_rpm`.
+thermal zone, fans, board temps, uptime, load and memory, then writes a
+`udm_thermal` measurement to the `network_metrics` bucket with fields:
+`up` (1 reachable / 0 unreachable), `soc_temp_c`, `soc_temp_raw`, `fan1_rpm`,
+`fan2_rpm`, `uptime_s`, `load1`, `mem_used_pct`, `mem_total_kb`, `mem_avail_kb`,
+`board_temp1_c`/`board_temp2_c`/`board_temp3_c`. The `up` flag plus `uptime_s`
+are what make a **shutdown/reboot visible** (an `up=0` gap, then an `uptime_s`
+reset).
+
+> Note: this collector is the *only* on-device dependency — it reads sysfs over
+> SSH. It does **not** require any service installed on the UDM. A legacy
+> `telegraf-custom.service` (left over from the old on-UDM setup, failing in a
+> restart loop with no binary) was removed; see the git history for that change.
 
 Secrets: `UDM_SSH_PASS` (UDM root SSH password) + `INFLUXDB_TOKEN` (write),
 synced from Infisical into the `udm-thermal-secrets` Secret by an
@@ -170,29 +179,42 @@ Verify a fresh SoC point lands (~15s): `kubectl logs -n ai -l app=udm-thermal
 `UDM Temperature` panel in `unifi-network.json` graphs `soc_temp_c` alongside
 the unpoller board temps.
 
-## UDM SoC alert (Grafana → Pushover → iPhone)
+## UDM alerts (Grafana → Pushover → iPhone)
 
-When the UDM SoC (`udm_thermal.soc_temp_c`) is **>= 90 °C for 1 minute**, a
-Grafana alert fires and pushes a notification to the iPhone via Pushover.
+Three alerts fire into Pushover. Critical ones use **high priority + siren**
+(bypass quiet hours); the informational one uses **normal priority** (chosen by
+the `severity` label: `critical` vs `info`).
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| **UDM SoC temperature high** | `soc_temp_c >= 90` for 1m | critical |
+| **UDM offline (unreachable)** | `up == 0` for 2m | critical |
+| **UDM rebooted** | `uptime_s < 300` (fresh boot) | info |
+
+Together these capture a shutdown from both sides: the device going dark
+(`up=0`) and coming back (uptime reset). When one fires, open the
+**UDM Health & Reboots** row on the `unifi-network` dashboard and read off the
+SoC temp, memory and load at that moment to fingerprint the cause.
 
 Pipeline: Grafana alert rule → webhook contact point `pushover-bridge` (a small
 in-cluster svc, `clusters/util-server/applications/pushover-bridge/`) →
 `api.pushover.net` → iOS push. Everything outbound, so it works whether you're
 home or away. Pushover keys (`PUSHOVER_USER_KEY` / `PUSHOVER_API_TOKEN`) are
-synced from Infisical by `pushover-secrets-sync`.
+synced from Infisical by `pushover-secrets-sync`. The bridge marks recovered
+alerts with `✅ ... resolved` and picks priority/sound from `severity`.
 
-The four alerting resources (folder `UDM Alerts`, contact point, notification
-policy, and the alert rule) are provisioned idempotently by:
+The alerting resources (folder `UDM Alerts`, contact point, notification policy,
+and every rule) are provisioned idempotently by:
 
 ```bash
 ./scripts/deploy-grafana-alerts.sh
 ```
 
-The rule definition (the `query → reduce → threshold` data pipeline) is the
-source of truth at `scripts/grafana/alerts/udm-soc-high.json`. Edit that file
-and re-run the script to update the live rule. Grafana file provisioning only
-covers rules (not contact points/policies), so this script drives Grafana's
-provisioning API instead.
+Each rule's source of truth is a file in `scripts/grafana/alerts/*.json` (the
+`query → reduce → threshold` data pipeline). Add/edit a file and re-run the
+script to update the live rules. Grafana file provisioning only covers rules
+(not contact points/policies), so this script drives Grafana's provisioning API
+instead.
 
 ## Dashboards
 

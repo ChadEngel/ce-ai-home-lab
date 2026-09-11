@@ -18,13 +18,12 @@
 # over the cluster network). Requires kubectl access to the 'ai' namespace.
 #
 # Run from the repository root: ./scripts/deploy-grafana-alerts.sh
-# Re-run any time you edit scripts/grafana/alerts/udm-soc-high.json.
+# Re-run any time you add/edit a rule in scripts/grafana/alerts/*.json.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-RULE_FILE="$REPO_ROOT/scripts/grafana/alerts/udm-soc-high.json"
 NAMESPACE="ai"
 
 GF_USER="$(kubectl get secret grafana-secrets -n "$NAMESPACE" -o jsonpath='{.data.admin-user}' | base64 -d)"
@@ -105,45 +104,59 @@ kubectl exec -n "$NAMESPACE" "$CURL_POD" -- sh -c \
    --data '{\"receiver\":\"pushover-bridge\",\"group_by\":[\"grafana_folder\",\"alertname\"],\"group_wait\":\"30s\",\"group_interval\":\"5m\",\"repeat_interval\":\"4h\"}' \
    $GRAFANA/api/v1/provisioning/policies" >/dev/null
 
-# 4. Upsert the alert rule (by title) from scripts/grafana/alerts/udm-soc-high.json.
-python3 - "$RULE_FILE" "$FOLDER_UID" <<'PYEOF'
+# 4. Upsert every alert rule defined in scripts/grafana/alerts/*.json (by
+#    title). Each file is the source of truth for one rule.
+RULE_COUNT=0
+for RULE_FILE in "$REPO_ROOT"/scripts/grafana/alerts/*.json; do
+  [ -f "$RULE_FILE" ] || continue
+
+  python3 - "$RULE_FILE" "$FOLDER_UID" <<'PYEOF' > /tmp/udm_rule_payload.json
 import json, sys
 rule = json.load(open(sys.argv[1]))
-uid = sys.argv[2]
-json.dump({
+payload = {
     "title": rule["title"],
     "ruleGroup": rule["ruleGroup"],
-    "folderUID": uid,
+    "folderUID": sys.argv[2],
     "condition": rule["condition"],
     "for": rule["for"],
     "noDataState": rule["noDataState"],
-    "execErrState": rule["execErrState"],
+    "execErrState": rule.get("execErrState", "OK"),
     "data": rule["data"],
-}, open("/tmp/udm_rule_payload.json", "w"))
+}
+if "labels" in rule:
+    payload["labels"] = rule["labels"]
+if "annotations" in rule:
+    payload["annotations"] = rule["annotations"]
+print(json.dumps(payload))
 PYEOF
 
-EXISTING="$(api GET /api/v1/provisioning/alert-rules)"
-echo "$EXISTING" > "$TMPDIR_L/rules.json"
-RULE_UID="$(python3 -c "
-import json
-for r in json.load(open('$TMPDIR_L/rules.json')):
-    if r.get('title') == 'UDM SoC temperature high':
+  RULE_TITLE="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["title"])' /tmp/udm_rule_payload.json)"
+  EXISTING="$(api GET /api/v1/provisioning/alert-rules)"
+  echo "$EXISTING" > "$TMPDIR_L/rules.json"
+  RULE_UID="$(python3 -c "
+import json, sys
+want = sys.argv[1]
+for r in json.load(open(sys.argv[2])):
+    if r.get('title') == want:
         print(r['uid']); break
-")"
-if [ -n "$RULE_UID" ]; then
-  echo "[ ] updating rule '$RULE_UID'"
-  RESP="$(api PUT "/api/v1/provisioning/alert-rules/$RULE_UID" /tmp/udm_rule_payload.json)"
-else
-  echo "[ ] creating rule"
-  RESP="$(api POST /api/v1/provisioning/alert-rules /tmp/udm_rule_payload.json)"
-fi
-rm -f /tmp/udm_rule_payload.json
-# The provisioning API returns the stored rule JSON on success; an error comes
-# back as an object with a "message". Verify we got a real rule (has a "uid").
-if ! echo "$RESP" | grep -q '"uid"'; then
-  echo "[⚠️] rule upsert did not return a uid; API said: $RESP" >&2
-  exit 1
-fi
-echo "[✅] rule upserted: $(echo "$RESP" | grep -o '"title":"[^"]*"' | head -1)"
+" "$RULE_TITLE" "$TMPDIR_L/rules.json")"
 
-echo "[✅] provisioning complete: 'UDM SoC temperature high' (SoC >= 90C for 1m) -> pushover"
+  if [ -n "$RULE_UID" ]; then
+    echo "  [ ] updating '$RULE_TITLE' ($RULE_UID)"
+    RESP="$(api PUT "/api/v1/provisioning/alert-rules/$RULE_UID" /tmp/udm_rule_payload.json)"
+  else
+    echo "  [ ] creating '$RULE_TITLE'"
+    RESP="$(api POST /api/v1/provisioning/alert-rules /tmp/udm_rule_payload.json)"
+  fi
+  rm -f /tmp/udm_rule_payload.json
+  # The provisioning API returns the stored rule JSON on success; an error comes
+  # back as an object with a "message". Verify we got a real rule (has a "uid").
+  if ! echo "$RESP" | grep -q '"uid"'; then
+    echo "[⚠️] upsert failed for '$RULE_TITLE'; API said: $RESP" >&2
+    exit 1
+  fi
+  echo "      [ok] $RULE_TITLE"
+  RULE_COUNT=$((RULE_COUNT + 1))
+done
+
+echo "[✅] provisioning complete: $RULE_COUNT alert rule(s) -> pushover-bridge"

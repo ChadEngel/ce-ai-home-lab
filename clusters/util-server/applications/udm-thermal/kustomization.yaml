@@ -51,29 +51,79 @@ data:
         -H "Authorization: Token ${INFLUXDB_TOKEN}" \
         -o /dev/null -w '%{http_code}'
     }
+    # Remote collector, fed to the UDM's sh over stdin. Using stdin avoids the
+    # nested-quoting problems of embedding awk/cut programs in an ssh argument.
+    # Emits key=value lines: SoC thermal zone, fans, adt7475 board temps, plus
+    # uptime/load/memory — enough to fingerprint a shutdown or reboot.
+    cat > /tmp/remote_collect.sh <<'REMOTE'
+    echo "uptime=$(cut -d. -f1 /proc/uptime)"
+    echo "load1=$(cut -d' ' -f1 /proc/loadavg)"
+    echo "memtotal=$(awk '/^MemTotal:/{print $2}' /proc/meminfo)"
+    echo "memavail=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)"
+    echo "soc=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)"
+    echo "fan1=$(cat /sys/class/hwmon/hwmon0/device/fan1_input 2>/dev/null)"
+    echo "fan2=$(cat /sys/class/hwmon/hwmon0/device/fan2_input 2>/dev/null)"
+    echo "bt1=$(cat /sys/class/hwmon/hwmon0/device/temp1_input 2>/dev/null)"
+    echo "bt2=$(cat /sys/class/hwmon/hwmon0/device/temp2_input 2>/dev/null)"
+    echo "bt3=$(cat /sys/class/hwmon/hwmon0/device/temp3_input 2>/dev/null)"
+    REMOTE
+
     echo "udm-thermal collector starting: ${UDM_USER}@${UDM_HOST} interval=${INTERVAL}s bucket=${INFLUX_BUCKET}"
     while true; do
       ts="$(date +%s)"
-      soc_raw="$(sshpass -e ssh $SSH_OPTS "${UDM_USER}@${UDM_HOST}" 'cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null' 2>/dev/null || echo '')"
-      fan1="$(sshpass -e ssh $SSH_OPTS "${UDM_USER}@${UDM_HOST}" 'cat /sys/class/hwmon/hwmon0/device/fan1_input 2>/dev/null' 2>/dev/null || echo '')"
-      fan2="$(sshpass -e ssh $SSH_OPTS "${UDM_USER}@${UDM_HOST}" 'cat /sys/class/hwmon/hwmon0/device/fan2_input 2>/dev/null' 2>/dev/null || echo '')"
+      out="$(sshpass -e ssh $SSH_OPTS "${UDM_USER}@${UDM_HOST}" 'sh -s' < /tmp/remote_collect.sh 2>/dev/null || echo '')"
+
+      uptime_s=''; load1=''; memtotal=''; memavail=''; soc_raw=''; fan1=''; fan2=''; bt1=''; bt2=''; bt3=''; mem_used_pct=''
+      if [ -n "$out" ]; then
+        while IFS='=' read -r k v; do
+          case "$k" in
+            uptime) uptime_s="$v" ;;
+            load1) load1="$v" ;;
+            memtotal) memtotal="$v" ;;
+            memavail) memavail="$v" ;;
+            soc) soc_raw="$v" ;;
+            fan1) fan1="$v" ;;
+            fan2) fan2="$v" ;;
+            bt1) bt1="$v" ;;
+            bt2) bt2="$v" ;;
+            bt3) bt3="$v" ;;
+          esac
+        done <<EOF
+    $out
+    EOF
+      fi
+
+      # Required readings for a valid sample.
       valid="yes"
-      for v in "$soc_raw" "$fan1" "$fan2"; do
-        case "$v" in
-          ''|*[!0-9]*) valid="no" ;;
-        esac
+      for v in "$uptime_s" "$soc_raw" "$fan1" "$fan2"; do
+        case "$v" in ''|*[!0-9]*) valid="no" ;; esac
       done
+
       if [ "$valid" = "yes" ]; then
         soc_c=$((soc_raw / 1000))
-        line="udm_thermal,mac=${MAC},host=${UDM_HOST} soc_temp_c=${soc_c},soc_temp_raw=${soc_raw},fan1_rpm=${fan1},fan2_rpm=${fan2} ${ts}"
+        fields="up=1,soc_temp_c=${soc_c},soc_temp_raw=${soc_raw},fan1_rpm=${fan1},fan2_rpm=${fan2},uptime_s=${uptime_s}"
+        if [ -n "$memtotal" ] && [ -n "$memavail" ]; then
+          mem_used_pct=$(( (memtotal - memavail) * 100 / memtotal ))
+          fields="${fields},mem_used_pct=${mem_used_pct},mem_total_kb=${memtotal},mem_avail_kb=${memavail}"
+        fi
+        [ -n "$load1" ] && fields="${fields},load1=${load1}"
+        case "$bt1" in ''|*[!0-9]*) ;; *) fields="${fields},board_temp1_c=$((bt1/1000))" ;; esac
+        case "$bt2" in ''|*[!0-9]*) ;; *) fields="${fields},board_temp2_c=$((bt2/1000))" ;; esac
+        case "$bt3" in ''|*[!0-9]*) ;; *) fields="${fields},board_temp3_c=$((bt3/1000))" ;; esac
+        line="udm_thermal,mac=${MAC},host=${UDM_HOST} ${fields} ${ts}"
         code="$(post "$line")"
         if [ "$code" = "204" ]; then
-          printf '%s  SoC=%dC  Fan1=%sRPM  Fan2=%sRPM  -> influx %s\n' "$(date '+%H:%M:%S')" "$soc_c" "$fan1" "$fan2" "$code"
+          printf '%s  up  SoC=%dC Fan2=%sRPM mem=%s%% uptime=%ss -> influx %s\n' "$(date '+%H:%M:%S')" "$soc_c" "$fan2" "${mem_used_pct:-?}" "$uptime_s" "$code"
         else
           echo "$(date '+%H:%M:%S') influx write failed http=$code"
         fi
       else
-        echo "$(date '+%H:%M:%S') bad reads (soc=${soc_raw} fan1=${fan1} fan2=${fan2}) — SSH/auth/host issue"
+        # UDM unreachable (down or rebooting): record an explicit up=0 marker so
+        # the outage is visible on the dashboard and can raise an alert. A reboot
+        # then also shows as a drop in uptime_s on the next successful sample.
+        line="udm_thermal,mac=${MAC},host=${UDM_HOST} up=0 ${ts}"
+        code="$(post "$line")"
+        echo "$(date '+%H:%M:%S') UDM UNREACHABLE — wrote up=0 (influx $code)"
       fi
       sleep "$INTERVAL"
     done

@@ -47,30 +47,41 @@ data:
             return "resolved"
         return "firing"
 
-    def extract_text(body, status):
+    def severity(body):
+        # Alert severity label, used to decide push priority/sound. Alerts may
+        # carry it under commonLabels or on the individual alert labels.
         alerts = body.get("alerts") or []
-        # Pull the SoC value / summary from annotations if present.
+        sev = (body.get("commonLabels") or {}).get("severity")
+        if not sev and alerts:
+            sev = (alerts[0].get("labels") or {}).get("severity")
+        return str(sev or "").lower()
+
+    def extract_text(body, status, sev):
+        alerts = body.get("alerts") or []
         annot = {}
         if alerts:
             annot = (alerts[0].get("annotations") or {})
         summary = annot.get("summary") or annot.get("description") or ""
+        alertname = (alerts[0].get("labels") or {}).get("alertname", "") if alerts else ""
 
         if status == "resolved":
-            title = "✅ UDM SoC back to normal"
-            msg = summary or "The UDM SoC temperature has dropped back below the alert threshold."
+            title = "✅ " + (alertname or "UDM alert") + " resolved"
+            msg = summary or "The alert has cleared; the UDM is back to normal."
+        elif sev in ("info", "warning", "warn"):
+            title = "ℹ️ " + (body.get("title") or alertname or "UDM alert")
+            msg = summary or alertname or "UDM informational alert."
         else:
-            title = "🚨 " + (body.get("title") or "UDM SoC temperature high")
-            msg = summary if summary else ((alerts[0].get("labels") or {}).get("alertname", "") if alerts else "")
-            msg = msg or "UDM SoC temperature exceeded the threshold."
+            title = "🚨 " + (body.get("title") or alertname or "UDM alert")
+            msg = summary or alertname or "UDM critical alert."
         return (title, msg)
 
-    def send_pushover(status, title, message):
+    def send_pushover(status, title, message, sev):
         if status == "resolved":
-            # Informational: normal priority, gentle sound.
-            params = {"priority": "0", "sound": "pushover"}
+            params = {"priority": "0", "sound": "pushover"}       # back to normal
+        elif sev in ("info", "warning", "warn"):
+            params = {"priority": "0", "sound": "pushover"}       # informational
         else:
-            # Emergency: high priority, siren.
-            params = {"priority": "1", "sound": "siren"}
+            params = {"priority": "1", "sound": "siren"}          # critical: bypass quiet hours
         data = urlencode(dict({
             "token": TOKEN, "user": USER,
             "title": title[:100], "message": message[:1000],
@@ -107,10 +118,11 @@ data:
                 self._send(500, b'{"error":"pushover secrets not set"}')
                 return
             status = classify(body)
-            title, message = extract_text(body, status)
-            sc = send_pushover(status, title, message)
+            sev = severity(body)
+            title, message = extract_text(body, status, sev)
+            sc = send_pushover(status, title, message, sev)
             if sc == 200:
-                print("%s pushover sent [%s]: %s" % (time.strftime("%H:%M:%S"), status, title))
+                print("%s pushover sent [%s/%s]: %s" % (time.strftime("%H:%M:%S"), status, sev or "-", title))
                 self._send(200, b'{"sent":true}')
             else:
                 print("%s pushover FAILED http=%s" % (time.strftime("%H:%M:%S"), sc))

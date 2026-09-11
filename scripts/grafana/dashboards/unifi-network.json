@@ -459,6 +459,14 @@
             "uid": "dfdkew37wk1dse"
           },
           "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg\" and (r._field == \"cpu\" or r._field == \"mem\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"udm_cm\")"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"mem_used_pct\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"meminfo\")"
         }
       ],
       "fieldConfig": {
@@ -679,6 +687,14 @@
             "uid": "dfdkew37wk1dse"
           },
           "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg\" and r._field == \"uplink_latency\")\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"latency\")"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"load1\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"udmload\")"
         }
       ],
       "fieldConfig": {
@@ -748,7 +764,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 67
       },
       "panels": []
     },
@@ -765,7 +781,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 59
+        "y": 68
       },
       "targets": [
         {
@@ -830,7 +846,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 59
+        "y": 68
       },
       "targets": [
         {
@@ -895,7 +911,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 67
+        "y": 76
       },
       "targets": [
         {
@@ -965,7 +981,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 75
+        "y": 84
       },
       "targets": [
         {
@@ -1093,7 +1109,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 81
+        "y": 90
       },
       "panels": []
     },
@@ -1110,7 +1126,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 82
+        "y": 91
       },
       "targets": [
         {
@@ -1211,7 +1227,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 90
+        "y": 99
       },
       "targets": [
         {
@@ -1325,7 +1341,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 98
+        "y": 107
       },
       "targets": [
         {
@@ -1389,7 +1405,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 98
+        "y": 107
       },
       "targets": [
         {
@@ -1531,6 +1547,167 @@
           "calcs": [
             "lastNotNull",
             "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 26,
+      "type": "row",
+      "title": "UDM Health & Reboots",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
+      "panels": []
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "UDM Uptime / Reboots",
+      "description": "udm_thermal.uptime_s. A sawtooth reset to ~0 = the UDM rebooted/shut down. Use with SoC temp, mem and load to fingerprint the cause.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 59
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"uptime_s\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> yield(name: \"uptime\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "Uptime"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "min"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "UDM Reachability",
+      "description": "udm_thermal.up. 1 = reachable; 0 = collector could not reach the UDM (device down/rebooting). Down periods reveal every shutdown.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 59
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          },
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"up\")\n  |> aggregateWindow(every: v.windowPeriod, fn: min, createEmpty: false)\n  |> yield(name: \"up\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 25,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false,
+            "show": {
+              "line": true,
+              "points": false
+            }
+          },
+          "displayName": "Reachable",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "min"
           ]
         },
         "tooltip": {
