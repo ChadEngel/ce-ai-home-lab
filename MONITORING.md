@@ -179,6 +179,50 @@ Verify a fresh SoC point lands (~15s): `kubectl logs -n ai -l app=udm-thermal
 `UDM Temperature` panel in `unifi-network.json` graphs `soc_temp_c` alongside
 the unpoller board temps.
 
+## synthetic-monitor (service availability → kube_metrics)
+
+A **client-in-the-cluster** (`clusters/util-server/applications/synthetic-monitor/`)
+that every 30s HTTP-checks each core service's health endpoint *from inside the
+cluster* (acting as a remote client, so DNS/TLS/ingress/backend are all
+exercised) and writes a `service_health` measurement to `kube_metrics`:
+fields `up` (1/0), `http_code`, `latency_ms`; tag `service`.
+
+| service | endpoint checked |
+|---------|------------------|
+| influxdb | `http://aiserver.home:8086/health` |
+| bifrost | `https://llm.caehomelab.com/health` |
+| openwebui | `https://ai.caehomelab.com/health` |
+| ollama | `http://aiserver.home:11434/api/tags` |
+
+Secret: `INFLUXDB_TOKEN` (write) from `synthetic-monitor-secrets`, synced from
+Infisical by `synthetic-monitor-secrets-sync`.
+
+```bash
+kubectl apply -f clusters/util-server/applications/synthetic-monitor/kustomization.yaml
+```
+
+Dashboard **CE AI Lab — Infrastructure Availability** (`infra-availability`)
+shows a **red/yellow/green traffic light** per service (plus UDM reachability,
+unioned from `udm_thermal.up`):
+
+- 🟢 **green** = up for the last 10 minutes
+- 🟡 **yellow** = recovering (down within the last 10 min but up now)
+- 🔴 **red** = down now
+
+## Infrastructure availability alerts (Grafana → Pushover → iPhone)
+
+Two rules in `scripts/grafana/alerts/` cover the four services (UDM has its own
+offline/reboot alerts below):
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| **Infrastructure service down** | state == 0 for 1m | critical (siren) |
+| **Infrastructure service recovering** | state == 1 | info (gentle) |
+
+They are per-service (Grafana creates one alert instance per `service` series,
+and the notification policy groups by `service`), and both **resolve
+automatically** — the resolve message is the all-clear (✅).
+
 ## UDM alerts (Grafana → Pushover → iPhone)
 
 Three alerts fire into Pushover. Critical ones use **high priority + siren**

@@ -147,6 +147,22 @@ at `/var/lib/grafana/dashboards/default`.
     top-right time range to a representative window (e.g. a busy hour or a
     full day) before sizing. Sorted by CPU peak desc.
 
+- **`infra-availability.json`** — `CE AI Lab — Infrastructure Availability`
+  A red/yellow/green board answering "is everything usable right now?". Backed
+  by the `service_health` measurement (`kube_metrics`, written by the
+  `synthetic-monitor` probe) plus `udm_thermal.up` (`network_metrics`).
+
+  Panels:
+  - **Infrastructure Status** — the traffic light: one tile per service
+    (influxdb, bifrost, openwebui, ollama, udm) coloured **red = down**,
+    **yellow = recovering** (down in the last 10 min but up now), **green = up**.
+  - **Availability (1 = up, 0 = down)** — per-service up/down over time.
+  - **Response Time (ms)** — per-service health-endpoint latency (rising =
+    degrading usability before a hard down).
+
+  The traffic-light state is computed in Flux (last vs. min-over-10m per
+  service); see `scripts/grafana/alerts/infra-*.json` for the matching alerts.
+
 ## Datasource requirements
 
 The dashboard hardcodes datasource uid `dfdkew37wk1dse`, which is the uid set

@@ -1,0 +1,62 @@
+{
+  "title": "Infrastructure service down",
+  "ruleGroup": "infra-availability",
+  "folder": "Infrastructure Alerts",
+  "for": "1m",
+  "noDataState": "OK",
+  "execErrState": "OK",
+  "condition": "C",
+  "labels": {
+    "severity": "critical"
+  },
+  "annotations": {
+    "summary": "{{ $labels.service }} is DOWN (health check failing)."
+  },
+  "data": [
+    {
+      "refId": "A",
+      "datasourceUid": "dfdkew37wk1dse",
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
+      "model": {
+        "refId": "A",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "dfdkew37wk1dse"
+        },
+        "query": "svcUp = from(bucket: \"kube_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"service_health\" and r._field == \"up\")\n  |> group(columns: [\"service\"])\ncurrent = svcUp |> last() |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"current\"})\nrecent = svcUp |> min() |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"recent\"})\njoin(tables: {c: current, r: recent}, on: [\"service\"])\n  |> map(fn: (r) => ({ service: r.service, _value: if r.current == 0.0 then 0.0 else if r.recent == 0.0 then 1.0 else 2.0 }))\n  |> map(fn: (r) => ({ r with _time: now() }))\n  |> keep(columns: [\"_time\", \"service\", \"_value\"])"
+      }
+    },
+    {
+      "refId": "B",
+      "datasourceUid": "__expr__",
+      "model": {
+        "type": "reduce",
+        "expression": "A",
+        "reducer": "last",
+        "refId": "B"
+      }
+    },
+    {
+      "refId": "C",
+      "datasourceUid": "__expr__",
+      "model": {
+        "type": "threshold",
+        "expression": "B",
+        "conditions": [
+          {
+            "evaluator": {
+              "type": "lt",
+              "params": [
+                1
+              ]
+            }
+          }
+        ],
+        "refId": "C"
+      }
+    }
+  ]
+}

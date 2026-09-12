@@ -1,0 +1,138 @@
+# synthetic-monitor — a client-in-the-cluster that probes service health.
+#
+# Purpose: answer "are the core services actually usable?" by making real HTTP
+# requests from inside the cluster (a different host than the services), i.e.
+# acting as a remote client. Every INTERVAL seconds it hits each service's
+# health endpoint and writes a `service_health` measurement to InfluxDB:
+#   fields: up (1/0), http_code, latency_ms
+#   tag:    service (influxdb, bifrost, openwebui, ollama)
+#
+# Grafana then turns this into a red/yellow/green availability board and fires
+# Pushover alerts (see scripts/grafana/alerts/infra-*.json):
+#   red   = up == 0 now                (Down)        -> critical alert
+#   yellow= up == 1 now but a 0 in the
+#           last 10 minutes            (Recovering)  -> info notify
+#   green = up == 1 for the last 10min (OK)          -> alerts resolve (all clear)
+#
+# The probe reads the endpoints clients use (aiserver.home for InfluxDB/Ollama,
+# the public ingress hostnames for Bifrost/Open WebUI), so a green result means
+# the whole path — DNS, TLS, ingress, backend — works.
+#
+# Secrets: INFLUXDB_TOKEN (write) from K8s secret `synthetic-monitor-secrets`,
+# synced from Infisical by synthetic-monitor-secrets-sync.
+#
+# Deploy: kubectl apply -f this file (or ./scripts/deploy-synthetic-monitor.sh)
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: synthetic-monitor-poll
+  namespace: ai
+data:
+  poll.sh: |
+    #!/bin/sh
+    set -u
+    : "${INFLUXDB_TOKEN:?INFLUXDB_TOKEN unset}"
+    INFLUX_URL="${INFLUX_URL:-http://aiserver.home:8086}"
+    INFLUX_ORG="${INFLUX_ORG:-home}"
+    INFLUX_BUCKET="${INFLUX_BUCKET:-kube_metrics}"
+    INTERVAL="${INTERVAL:-30}"
+    TIMEOUT="${TIMEOUT:-8}"
+
+    # name|url — checked from in-cluster, as a remote client would.
+    SERVICES="influxdb|http://aiserver.home:8086/health
+    bifrost|https://llm.caehomelab.com/health
+    openwebui|https://ai.caehomelab.com/health
+    ollama|http://aiserver.home:11434/api/tags"
+
+    post() {
+      curl -sS -X POST \
+        --data-binary "$1" \
+        "${INFLUX_URL}/api/v2/write?org=${INFLUX_ORG}&bucket=${INFLUX_BUCKET}&precision=s" \
+        -H "Authorization: Token ${INFLUXDB_TOKEN}" \
+        -o /dev/null -w '%{http_code}'
+    }
+
+    echo "synthetic-monitor starting: interval=${INTERVAL}s bucket=${INFLUX_BUCKET}"
+    while true; do
+      ts="$(date +%s)"
+      echo "$SERVICES" | while IFS='|' read -r name url; do
+        [ -n "$name" ] || continue
+        out="$(curl -s -o /dev/null -m "$TIMEOUT" -w '%{http_code} %{time_total}' "$url" 2>/dev/null || echo '000 0')"
+        code="${out%% *}"; tt="${out##* }"
+        case "$code" in
+          2??|3??) up=1; codenum="$code"; lat="$(awk "BEGIN{printf \"%.1f\", ${tt:-0}*1000}")" ;;
+          *)       up=0; codenum=-1;       lat="-1" ;;
+        esac
+        line="service_health,service=${name} up=${up},http_code=${codenum},latency_ms=${lat} ${ts}"
+        rc="$(post "$line")"
+        printf '%s  %-9s up=%s http=%s lat=%sms -> influx %s\n' \
+          "$(date '+%H:%M:%S')" "$name" "$up" "$codenum" "$lat" "$rc"
+      done
+      sleep "$INTERVAL"
+    done
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synthetic-monitor
+  namespace: ai
+  labels:
+    app: synthetic-monitor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: synthetic-monitor
+  template:
+    metadata:
+      labels:
+        app: synthetic-monitor
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: probe
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              echo "[deps] apk add curl ca-certificates..."
+              apk add --no-cache curl ca-certificates >/dev/null
+              update-ca-certificates >/dev/null 2>&1 || true
+              exec /bin/sh /etc/synthetic-monitor/poll.sh
+          env:
+            - name: INFLUXDB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: synthetic-monitor-secrets
+                  key: INFLUXDB_TOKEN
+            - name: INFLUX_URL
+              value: "http://aiserver.home:8086"
+            - name: INFLUX_ORG
+              value: "home"
+            - name: INFLUX_BUCKET
+              value: "kube_metrics"
+            - name: INTERVAL
+              value: "30"
+            - name: TIMEOUT
+              value: "8"
+          volumeMounts:
+            - name: poll-script
+              mountPath: /etc/synthetic-monitor
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              cpu: 100m
+              memory: 96Mi
+      volumes:
+        - name: poll-script
+          configMap:
+            name: synthetic-monitor-poll
+            defaultMode: 0755
