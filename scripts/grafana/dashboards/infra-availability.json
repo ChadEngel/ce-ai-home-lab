@@ -56,7 +56,7 @@
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
           },
-          "query": "udmUp = from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"up\")\n  |> group()\n  |> map(fn: (r) => ({ r with service: \"udm\" }))\n  |> keep(columns: [\"_time\", \"_value\", \"service\"])\n\nsvcUp = from(bucket: \"kube_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"service_health\" and r._field == \"up\")\n  |> keep(columns: [\"_time\", \"_value\", \"service\"])\n\nallUp = union(tables: [udmUp, svcUp]) |> group(columns: [\"service\"])\ncurrent = allUp |> last() |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"current\"})\nrecent  = allUp |> min()  |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"recent\"})\n\njoin(tables: {c: current, r: recent}, on: [\"service\"])\n  |> map(fn: (r) => ({\n      service: r.service,\n      _value: if r.current == 0.0 then 0.0 else if r.recent == 0.0 then 1.0 else 2.0,\n  }))\n  |> keep(columns: [\"service\", \"_value\"])\n  |> yield(name: \"state\")"
+          "query": "udmUp = from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"up\")\n  |> group()\n  |> map(fn: (r) => ({ r with service: \"udm\" }))\n  |> keep(columns: [\"_time\", \"_value\", \"service\"])\n\nsvcUp = from(bucket: \"kube_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"service_health\" and r._field == \"up\")\n  |> keep(columns: [\"_time\", \"_value\", \"service\"])\n\nallUp = union(tables: [udmUp, svcUp]) |> group(columns: [\"service\"])\ncurrent = allUp |> last() |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"current\"})\nrecent  = allUp |> min()  |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"recent\"})\n\njoin(tables: {c: current, r: recent}, on: [\"service\"])\n  |> map(fn: (r) => ({\n      service: r.service,\n      _value: if r.current == 0.0 then 0.0 else if r.recent == 0.0 then 1.0 else 2.0,\n  }))\n  |> map(fn: (r) => ({ r with service:\n        if r.service == \"influxdb\" then \"\ud835\udc08\ud835\udc27\ud835\udc1f\ud835\udc25\ud835\udc2e\ud835\udc31\ud835\udc03\ud835\udc01\"\n        else if r.service == \"bifrost\" then \"\ud835\udc01\ud835\udc22\ud835\udc1f\ud835\udc2b\ud835\udc28\ud835\udc2c\ud835\udc2d\"\n        else if r.service == \"openwebui\" then \"\ud835\udc0e\ud835\udc29\ud835\udc1e\ud835\udc27 \ud835\udc16\ud835\udc1e\ud835\udc1b \ud835\udc14\ud835\udc08\"\n        else if r.service == \"ollama\" then \"\ud835\udc0e\ud835\udc25\ud835\udc25\ud835\udc1a\ud835\udc26\ud835\udc1a\"\n        else if r.service == \"udm\" then \"\ud835\udc14\ud835\udc03\ud835\udc0c\"\n        else r.service }))\n  |> keep(columns: [\"service\", \"_value\"])\n  |> yield(name: \"state\")"
         }
       ],
       "fieldConfig": {
@@ -104,7 +104,7 @@
             "mode": "thresholds"
           },
           "unit": "none",
-          "displayName": "${__field.labels.service}"
+          "displayName": "${__field.labels.service}:"
         },
         "overrides": []
       },
