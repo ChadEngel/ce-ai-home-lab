@@ -59,16 +59,32 @@ data:
       ts="$(date +%s)"
       echo "$SERVICES" | while IFS='|' read -r name url; do
         [ -n "$name" ] || continue
-        out="$(curl -s -o /dev/null -m "$TIMEOUT" -w '%{http_code} %{time_total}' "$url" 2>/dev/null || echo '000 0')"
-        code="${out%% *}"; tt="${out##* }"
+        # Full timing breakdown: http_code dns connect tls(appconnect)
+        # ttfb(starttransfer) total.
+        out="$(curl -s -o /dev/null -m "$TIMEOUT" \
+          -w '%{http_code} %{time_namelookup} %{time_connect} %{time_appconnect} %{time_starttransfer} %{time_total}' \
+          "$url" 2>/dev/null || echo '000 0 0 0 0 0')"
+        set -- $out
+        code="${1:-000}"; dns="${2:-0}"; con="${3:-0}"; tls="${4:-0}"; ttfb="${5:-0}"; tot="${6:-0}"
         case "$code" in
-          2??|3??) up=1; codenum="$code"; lat="$(awk "BEGIN{printf \"%.1f\", ${tt:-0}*1000}")" ;;
-          *)       up=0; codenum=-1;       lat="-1" ;;
+          2??|3??) up=1; codenum="$code" ;;
+          *)       up=0; codenum=-1 ;;
         esac
-        line="service_health,service=${name} up=${up},http_code=${codenum},latency_ms=${lat} ${ts}"
+        # latency_ms = total client-observed time (incl. DNS/TCP/TLS/ingress).
+        # server_ms  = connection-ready -> first byte = the SERVICE's own
+        #              processing time (TLS/connect excluded), comparable across
+        #              HTTP and HTTPS services. https makes tls the dominant
+        #              term in latency_ms, so server_ms is the fair comparison.
+        fields="$(awk -v up="$up" -v code="$codenum" -v dns="$dns" -v con="$con" -v tls="$tls" -v ttfb="$ttfb" -v tot="$tot" 'BEGIN{
+          if (up != 1) { printf "up=0,http_code=-1,latency_ms=-1"; exit }
+          base = (tls > 0 ? tls : con);
+          srv = ttfb - base; if (srv < 0) srv = 0;
+          printf "up=1,http_code=%d,latency_ms=%.1f,server_ms=%.1f,dns_ms=%.1f,connect_ms=%.1f,tls_ms=%.1f",
+                 code, tot*1000, srv*1000, dns*1000, con*1000, (tls>0 ? (tls-con)*1000 : 0)
+        }')"
+        line="service_health,service=${name} ${fields} ${ts}"
         rc="$(post "$line")"
-        printf '%s  %-9s up=%s http=%s lat=%sms -> influx %s\n' \
-          "$(date '+%H:%M:%S')" "$name" "$up" "$codenum" "$lat" "$rc"
+        printf '%s  %-9s %s -> influx %s\n' "$(date '+%H:%M:%S')" "$name" "$fields" "$rc"
       done
       sleep "$INTERVAL"
     done

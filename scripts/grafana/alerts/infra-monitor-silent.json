@@ -1,0 +1,42 @@
+{
+  "title": "Infrastructure monitor is silent",
+  "ruleGroup": "infra-availability",
+  "folder": "Infrastructure Alerts",
+  "for": "0s",
+  "noDataState": "Alerting",
+  "execErrState": "Alerting",
+  "condition": "C",
+  "labels": {
+    "severity": "critical"
+  },
+  "annotations": {
+    "summary": "The synthetic-monitor has not reported service_health for 3+ minutes — infrastructure availability is UNKNOWN (the probe pod is down, can't reach InfluxDB, or the write token is broken). Check: kubectl get pods -n ai -l app=synthetic-monitor."
+  },
+  "data": [
+    {
+      "refId": "A",
+      "datasourceUid": "dfdkew37wk1dse",
+      "relativeTimeRange": { "from": 300, "to": 0 },
+      "model": {
+        "refId": "A",
+        "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+        "query": "from(bucket: \"kube_metrics\")\n  |> range(start: -3m)\n  |> filter(fn: (r) => r._measurement == \"service_health\" and r._field == \"up\")\n  |> group()\n  |> count()\n  |> map(fn: (r) => ({ r with _time: now() }))\n  |> keep(columns: [\"_time\", \"_value\"])"
+      }
+    },
+    {
+      "refId": "B",
+      "datasourceUid": "__expr__",
+      "model": { "type": "reduce", "expression": "A", "reducer": "last", "refId": "B" }
+    },
+    {
+      "refId": "C",
+      "datasourceUid": "__expr__",
+      "model": {
+        "type": "threshold",
+        "expression": "B",
+        "conditions": [{ "evaluator": { "type": "lt", "params": [1] } }],
+        "refId": "C"
+      }
+    }
+  ]
+}

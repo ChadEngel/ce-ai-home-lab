@@ -185,7 +185,14 @@ A **client-in-the-cluster** (`clusters/util-server/applications/synthetic-monito
 that every 30s HTTP-checks each core service's health endpoint *from inside the
 cluster* (acting as a remote client, so DNS/TLS/ingress/backend are all
 exercised) and writes a `service_health` measurement to `kube_metrics`:
-fields `up` (1/0), `http_code`, `latency_ms`; tag `service`.
+fields `up` (1/0), `http_code`, `latency_ms` (total client-observed time),
+`server_ms` (service processing only — connection/TLS excluded), `dns_ms`,
+`connect_ms`, `tls_ms`; tag `service`.
+
+> **Latency note:** `latency_ms` includes DNS + TCP + TLS + ingress, so HTTPS
+> services (bifrost, openwebui) look ~200–300ms slower purely from the TLS
+> handshake. Use `server_ms` (≈3–10ms for everything) for a fair cross-service
+> comparison; the dashboard shows both.
 
 | service | endpoint checked |
 |---------|------------------|

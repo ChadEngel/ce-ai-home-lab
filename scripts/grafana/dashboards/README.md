@@ -157,8 +157,10 @@ at `/var/lib/grafana/dashboards/default`.
     (influxdb, bifrost, openwebui, ollama, udm) coloured **red = down**,
     **yellow = recovering** (down in the last 10 min but up now), **green = up**.
   - **Availability (1 = up, 0 = down)** — per-service up/down over time.
-  - **Response Time (ms)** — per-service health-endpoint latency (rising =
-    degrading usability before a hard down).
+  - **Response Time (ms)** — two series per service: `(server)` (`server_ms`,
+    the service's own processing time — fair across services) and `(total)`
+    (`latency_ms`, client-observed including DNS/TCP/TLS/ingress; HTTPS
+    services carry ~200ms of TLS handshake).
 
   The traffic-light state is computed in Flux (last vs. min-over-10m per
   service); see `scripts/grafana/alerts/infra-*.json` for the matching alerts.
