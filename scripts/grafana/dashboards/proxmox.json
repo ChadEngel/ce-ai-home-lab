@@ -1,0 +1,476 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "ce-ai-lab",
+    "infrastructure",
+    "proxmox"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "CE AI Lab \u2014 Proxmox (caevmhost01)",
+  "uid": "proxmox",
+  "version": 0,
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Proxmox Host \u2014 caevmhost01",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Host CPU",
+      "description": "Node CPU utilisation = cpustat.cpu (object=nodes), as a percentage.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"cpustat\" and r._field == \"cpu\" and r.object == \"nodes\")\n  |> last()\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Host Memory",
+      "description": "Node memory used % = memory.memused / memory.memtotal (object=nodes).",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "red", "value": 92 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"memory\" and (r._field == \"memused\" or r._field == \"memtotal\") and r.object == \"nodes\")\n  |> group(columns: [\"_field\"])\n  |> last()\n  |> pivot(rowKey: [], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ _value: r.memused * 100.0 / r.memtotal }))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Host Load (1m)",
+      "description": "Node 1-minute load average = cpustat.avg1 (object=nodes).",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "fieldConfig": { "defaults": { "decimals": 2 }, "overrides": [] },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"cpustat\" and r._field == \"avg1\" and r.object == \"nodes\")\n  |> last()"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Host Uptime",
+      "description": "Node uptime = system.uptime (object=nodes). A reset means the Proxmox host rebooted.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "dtdurations" }, "overrides": [] },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"system\" and r._field == \"uptime\" and r.object == \"nodes\")\n  |> last()"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Host CPU Usage %",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 15, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"cpustat\" and r._field == \"cpu\" and r.object == \"nodes\")\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> aggregateWindow(every: 1m, fn: max, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Host Memory Used %",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 15, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"memory\" and (r._field == \"memused\" or r._field == \"memtotal\") and r.object == \"nodes\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: r.memused * 100.0 / r.memtotal }))\n  |> aggregateWindow(every: 1m, fn: max, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Host Load Average",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"cpustat\" and (r._field == \"avg1\" or r._field == \"avg5\" or r._field == \"avg15\") and r.object == \"nodes\")\n  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Host Network (bits/s)",
+      "description": "Node NIC throughput = derivative of nics.netin/netout (object=nodes) \u00d7 8.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"nics\" and r.object == \"nodes\" and (r._field == \"netin\" or r._field == \"netout\"))\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0 }))\n  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Virtual Machines",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "VMs Running",
+      "description": "Count of QEMU VMs reporting status=running.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 21 },
+      "fieldConfig": { "defaults": { "decimals": 0, "color": { "mode": "none" } }, "overrides": [] },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"system\" and r._field == \"status\" and r.object == \"qemu\")\n  |> group(columns: [\"host\", \"vmid\"])\n  |> last()\n  |> filter(fn: (r) => r._value == \"running\")\n  |> group()\n  |> count()"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "VM Inventory",
+      "description": "Per-VM CPU %, memory used %, memory allocated and uptime (system measurement, object=qemu).",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 5, "w": 18, "x": 6, "y": 21 },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "cpu_pct" }, "properties": [ { "id": "unit", "value": "percent" }, { "id": "decimals", "value": 1 }, { "id": "displayName", "value": "CPU %" } ] },
+          { "matcher": { "id": "byName", "options": "mem_pct" }, "properties": [ { "id": "unit", "value": "percent" }, { "id": "decimals", "value": 1 }, { "id": "displayName", "value": "Mem %" } ] },
+          { "matcher": { "id": "byName", "options": "mem_gib" }, "properties": [ { "id": "unit", "value": "GiB" }, { "id": "decimals", "value": 1 }, { "id": "displayName", "value": "Mem used" } ] },
+          { "matcher": { "id": "byName", "options": "maxmem_gib" }, "properties": [ { "id": "unit", "value": "GiB" }, { "id": "decimals", "value": 1 }, { "id": "displayName", "value": "Mem alloc" } ] },
+          { "matcher": { "id": "byName", "options": "uptime_h" }, "properties": [ { "id": "unit", "value": "h" }, { "id": "decimals", "value": 1 }, { "id": "displayName", "value": "Uptime (h)" } ] }
+        ]
+      },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"qemu\" and (r._field == \"cpu\" or r._field == \"mem\" or r._field == \"maxmem\" or r._field == \"uptime\"))\n  |> group(columns: [\"host\", \"vmid\", \"_field\"])\n  |> last()\n  |> pivot(rowKey: [\"host\", \"vmid\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ host: r.host, vmid: r.vmid, cpu_pct: r.cpu * 100.0, mem_pct: if r.maxmem > 0 then r.mem * 100.0 / r.maxmem else 0.0, mem_gib: r.mem / 1073741824.0, maxmem_gib: r.maxmem / 1073741824.0, uptime_h: r.uptime / 3600.0 }))\n  |> keep(columns: [\"host\", \"vmid\", \"cpu_pct\", \"mem_pct\", \"mem_gib\", \"maxmem_gib\", \"uptime_h\"])"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "VM CPU Usage %",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r._field == \"cpu\" and r.object == \"qemu\")\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> aggregateWindow(every: 1m, fn: max, createEmpty: false)\n  |> group(columns: [\"host\"])"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "VM Memory Used %",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"qemu\" and (r._field == \"mem\" or r._field == \"maxmem\"))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group(columns: [\"host\"])\n  |> map(fn: (r) => ({ r with _value: r.mem * 100.0 / r.maxmem }))\n  |> aggregateWindow(every: 1m, fn: max, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "VM Uptime (reset = reboot)",
+      "description": "system.uptime per VM. A sawtooth reset means the VM rebooted \u2014 the jump the Proxmox host caused on 2026-09-17 is visible here.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 33 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dtdurations",
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r._field == \"uptime\" and r.object == \"qemu\")\n  |> group(columns: [\"host\"])\n  |> aggregateWindow(every: 1m, fn: last, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "VM Network (bits/s)",
+      "description": "Per-VM throughput = derivative of nics.netin/netout (object=qemu) \u00d7 8.",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 33 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"nics\" and r.object == \"qemu\" and (r._field == \"netin\" or r._field == \"netout\"))\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0 }))\n  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "VM Disk I/O (B/s)",
+      "description": "Per-VM disk throughput = derivative of blockstat.rd_bytes/wr_bytes (object=qemu).",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 40 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"blockstat\" and r.object == \"qemu\" and (r._field == \"rd_bytes\" or r._field == \"wr_bytes\"))\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "VM Status",
+      "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 40 },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } }, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
+          "query": "from(bucket: \"proxmox_metrics\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"system\" and r._field == \"status\" and r.object == \"qemu\")\n  |> group(columns: [\"host\", \"vmid\"])\n  |> last()\n  |> keep(columns: [\"host\", \"vmid\", \"_value\"])\n  |> rename(columns: {_value: \"status\"})"
+        }
+      ]
+    }
+  ]
+}

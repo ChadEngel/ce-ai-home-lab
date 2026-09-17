@@ -147,6 +147,17 @@ at `/var/lib/grafana/dashboards/default`.
     top-right time range to a representative window (e.g. a busy hour or a
     full day) before sizing. Sorted by CPU peak desc.
 
+- **`proxmox.json`** — `CE AI Lab — Proxmox (caevmhost01)`
+  Host + VM dashboard for the Proxmox VE hypervisor, backed by the
+  `proxmox_metrics` bucket written natively by the PVE **Metric Server**
+  (`aiserver-influxdb` → `aiserver.home:8086`; see
+  `docs/how-to-monitor-hosts.md`). Host tiles (CPU %, memory %, load, uptime),
+  host CPU / memory / load / network trends, a **VM Inventory** table (CPU %,
+  memory used %, allocated memory, uptime), and per-VM CPU / memory / uptime
+  (reset = reboot) / network / disk I/O panels. Node metrics use
+  `object="nodes"` (no `vmid`); VM metrics use `object="qemu"` with `host` =
+  VM name and `vmid`.
+
 - **`infra-availability.json`** — `CE AI Lab — Infrastructure Availability`
   A red/yellow/green board answering "is everything usable right now?". Backed
   by the `service_health` measurement (`kube_metrics`, written by the
