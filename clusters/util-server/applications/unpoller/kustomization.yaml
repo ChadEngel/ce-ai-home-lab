@@ -176,9 +176,17 @@ spec:
             limits:
               cpu: 200m
               memory: 192Mi
+          # Liveness must check whether THIS process is alive, not whether the
+          # UDM controller is reachable. The old `unpoller --health` probe
+          # reported controller health, so every UDM outage (thermal reboot,
+          # etc.) failed the probe and made kubelet kill/restart the pod in a
+          # loop — turning a remote outage into a local crash loop. Probe the
+          # Prometheus endpoint the process already serves instead; a UDM
+          # outage then just logs retries and serves the last good snapshot.
           livenessProbe:
-            exec:
-              command: ["/usr/bin/unpoller", "--health"]
+            httpGet:
+              path: /
+              port: 9130
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10

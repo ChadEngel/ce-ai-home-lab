@@ -53,7 +53,7 @@
           {
             "evaluator": {
               "params": [
-                90
+                98
               ],
               "type": "gte"
             }
@@ -71,6 +71,6 @@
     "severity": "critical"
   },
   "annotations": {
-    "summary": "UDM SoC temperature is >= 90C for 1 minute. Fans may be ramping; check for a shutdown if it keeps climbing toward the 105C critical trip."
+    "summary": "UDM SoC temperature is >= 98C for 1 minute — close to the 105C critical trip. Fans should be pinned high; if this fires, stop sustained CPU work (e.g. support-file generation) and check airflow/ambient before it thermally shuts down."
   }
 }
