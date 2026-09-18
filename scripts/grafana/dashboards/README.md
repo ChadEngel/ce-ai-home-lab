@@ -193,6 +193,24 @@ Edit the JSON here, then re-run `./scripts/deploy-grafana.sh` (it rebuilds the
 ConfigMap and restarts Grafana's file-provider pickup). Or edit live in the
 Grafana UI and export back to this file.
 
+### Dashboard deletion safety
+
+The dashboard ConfigMap is mounted at `/var/lib/grafana/dashboards/default` and
+Grafana's file provider runs with `disableDeletion: false`, so **any dashboard
+missing from the ConfigMap is deleted from Grafana's database**. To keep a
+stale/incomplete checkout from silently removing live dashboards,
+`deploy-grafana.sh` is **additive by default**:
+
+- Live dashboards with no local `*.json` are **preserved** (re-applied
+  byte-for-byte from their current ConfigMap value) and reported loudly.
+- `--prune` makes the local directory authoritative — dashboards absent locally
+  are deleted (the old behavior). Use it for intentional removals.
+- It **refuses to run** if the local dashboard directory is empty.
+
+If you see `live dashboard(s) have no local *.json — PRESERVING them`, that
+dashboard exists only in the cluster. Export it and commit it here so it is
+tracked.
+
 ## Removed (historical)
 
 The previous dashboards (`final-k8s-monitoring.json`, `k8s-monitoring.json`,

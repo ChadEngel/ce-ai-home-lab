@@ -189,6 +189,13 @@ so the file provider picks up the ConfigMap change:
 kubectl rollout restart deployment/grafana -n ai
 ```
 
+> **Deletion safety:** the ConfigMap mount is authoritative — Grafana deletes
+> any dashboard not present in it (`disableDeletion: false`).
+> `deploy-grafana.sh` is therefore **additive by default**: dashboards that
+> exist in the cluster but not in your checkout are preserved and reported,
+> so a stale clone can't wipe them. Pass `--prune` to make the local directory
+> authoritative and actually remove dashboards.
+
 - **`linux-host-overview.json`** — *CE AI Lab — Linux Host Overview*
   (`/d/linux-host-overview/...`). 9 panels: CPU % per core, Memory %, Load
   1/5/15, Memory usage, Disk % per mount, Network throughput, Disk I/O, CPU
