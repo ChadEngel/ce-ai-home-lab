@@ -46,10 +46,17 @@ Every 60 seconds the script:
    failed/pending pods, stuck PVs) from `kubectl`
 2. Collects per-pod CPU, memory, and restart counts (via
    `kubectl top pods`, which requires `metrics-server`)
-3. Pushes everything as raw counters to InfluxDB
+3. Derives **pods per node** and **pods per application** from a single
+   `kubectl get pods -o custom-columns` call (pod `.spec.nodeName` and
+   `.metadata.ownerReferences[0].name`), written to `k8s_pods_per_node` and
+   `k8s_pods_per_app`
+4. Pushes everything as raw counters to InfluxDB
 
 The Grafana dashboards compute derived values (percentages, sums)
 in Flux so the writer stays simple.
+
+> `DRY_RUN=1` makes the writer print line protocol to stdout instead of
+> writing — useful for testing on a host without a token.
 
 ## Setup the writer
 

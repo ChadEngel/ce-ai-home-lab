@@ -14,6 +14,8 @@
 #   INFLUX_HOST    default: http://aiserver.home:8086
 #   INFLUX_ORG     default: home
 #   INFLUX_BUCKET  default: kube_metrics
+#   DRY_RUN=1      print line protocol to stdout instead of writing
+#                  (useful for testing without a token)
 #
 # Logs go to stdout/stderr so systemd captures them in journald:
 #   journalctl -u k3s-metrics-push.service -f
@@ -24,6 +26,12 @@ INFLUX_HOST="${INFLUX_HOST:-http://aiserver.home:8086}"
 INFLUX_ORG="${INFLUX_ORG:-home}"
 INFLUX_BUCKET="${INFLUX_BUCKET:-kube_metrics}"
 TOKEN="${INFLUX_TOKEN:-}"
+
+# DRY_RUN never writes, so it needs no token -- skip the Infisical fetch
+# (and its retry sleeps) entirely.
+if [ "${DRY_RUN:-0}" = "1" ]; then
+    TOKEN="dry-run"
+fi
 
 # Fetch the token from Infisical if not provided in the environment.
 # Boot-race note: the systemd timer has Persistent=true, so it fires
@@ -89,9 +97,24 @@ escape_lp() {
     printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/,/\\,/g' -e 's/ /\\ /g' -e 's/=/\\=/g'
 }
 
+# Derive a stable "application" name from a workload name by stripping the
+# generated suffix Kubernetes appends:
+#   ReplicaSet pod-template-hash : grafana-6c9bf985c8       -> grafana
+#   Job controller revision      : postgres-backup-29828370 -> postgres-backup
+#   k3s DaemonSet node hash      : svclb-traefik-30253d90   -> svclb-traefik
+# StatefulSet names (postgres) and plain names are returned unchanged.
+app_name() {
+    printf '%s' "$1" | sed -E 's/-[0-9a-f]{7,10}$//'
+}
+
 # Influx line-protocol write. Logs failures to stderr (journald captures it).
+# Set DRY_RUN=1 to print the lines instead of writing (debugging on a host).
 influx_write() {
     local line="$1"
+    if [ "${DRY_RUN:-0}" = "1" ]; then
+        printf '%s\n' "$line"
+        return 0
+    fi
     local out
     out=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' \
         "${INFLUX_URL}" \
@@ -168,19 +191,58 @@ if kubectl top nodes &>/dev/null; then
     fi
 fi
 
-# ---- Pod Restart Counts ----
-pod_restart_data=$(kubectl get pods --all-namespaces \
-    -o custom-columns='NAMESPACE:{.metadata.namespace},POD:{.metadata.name},RESTARTS:{.status.containerStatuses[0].restartCount}' \
+# ---- Pod Restart Counts + Placement ----
+# One kubectl call yields restarts plus the pod's node and owning workload,
+# which is all we need to derive pods-per-node and pods-per-application.
+# `node` here is the pod's actual .spec.nodeName (NOT the collector's host).
+# NOTE: no bash associative arrays -- they need bash 4+, and the macOS dev
+# boxes only ship bash 3.2. We aggregate with sort | uniq -c instead.
+
+pod_data=$(kubectl get pods --all-namespaces \
+    -o custom-columns='NAMESPACE:{.metadata.namespace},POD:{.metadata.name},NODE:{.spec.nodeName},OWNER:{.metadata.ownerReferences[0].name},RESTARTS:{.status.containerStatuses[0].restartCount}' \
     2>/dev/null | tail -n +2 || true)
-if [ -n "$pod_restart_data" ]; then
-    while read -r ns pod rest_count; do
+
+node_counts=""
+app_counts=""
+if [ -n "$pod_data" ]; then
+    while read -r ns pod node owner rest_count; do
         [ -z "$ns" ] || [ -z "$pod" ] && continue
-        : "${rest_count:=0}"
+        case "$rest_count" in ''|'<none>') rest_count=0 ;; esac
         ns_t=$(escape_lp "$ns")
         pod_t=$(escape_lp "$pod")
         influx_write "k8s_pod_restarts,host=${HOST_TAG},namespace=${ns_t},pod=${pod_t} count=${rest_count}i"
-    done <<< "$pod_restart_data"
+
+        # Pods per node (skip unscheduled pods -- they have no machine).
+        case "$node" in
+            ''|'<none>') : ;;
+            *) node_counts="${node_counts}${node}"$'\n' ;;
+        esac
+
+        # Pods per application (owner workload, falling back to pod name).
+        case "$owner" in ''|'<none>') owner="$pod" ;; esac
+        app=$(app_name "$owner")
+        [ -z "$app" ] && app="$pod"
+        app_counts="${app_counts}${ns}|${app}"$'\n'
+    done <<< "$pod_data"
 fi
 
-echo "[$(date '+%H:%M:%S')] Nodes ${NODE_READY}/${NODE_TOTAL} | Failed pods: ${PODS_FAILED} | Stuck PVs: ${FAILED_PVS}"
+# ---- Pods per Node ----
+if [ -n "$node_counts" ]; then
+    while read -r n count; do
+        [ -z "$n" ] && continue
+        influx_write "k8s_pods_per_node,host=${HOST_TAG},node=$(escape_lp "$n") pods=${count}i"
+    done < <(printf '%s' "$node_counts" | sort | uniq -c | awk '{print $2, $1}')
+fi
+
+# ---- Pods per Application ----
+if [ -n "$app_counts" ]; then
+    while read -r k count; do
+        [ -z "$k" ] && continue
+        ns_k="${k%%|*}"
+        app_k="${k#*|}"
+        influx_write "k8s_pods_per_app,host=${HOST_TAG},namespace=$(escape_lp "$ns_k"),app=$(escape_lp "$app_k") pods=${count}i"
+    done < <(printf '%s' "$app_counts" | sort | uniq -c | awk '{print $2, $1}')
+fi
+
+echo "[$(date '+%H:%M:%S')] Nodes ${NODE_READY}/${NODE_TOTAL} | Failed pods: ${PODS_FAILED} | Stuck PVs: ${FAILED_PVS} | node rows: $(printf '%s' "$node_counts" | grep -c . || true) | app rows: $(printf '%s' "$app_counts" | grep -c . || true)"
 exit 0

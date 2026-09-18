@@ -1,5 +1,5 @@
 {
-  "title": "CE AI Lab \u2014 K3s Cluster Monitor",
+  "title": "CE AI Lab — K3s Cluster Monitor",
   "uid": "k8s-cluster-monitor",
   "tags": [
     "k8s",
@@ -454,7 +454,7 @@
     {
       "id": 8,
       "type": "table",
-      "title": "Pod Inventory (running pods \u2014 CPU, memory, restarts)",
+      "title": "Pod Inventory (running pods — CPU, memory, restarts)",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -609,6 +609,259 @@
               "cpu_millicores": 2,
               "memory_kb": 3,
               "restarts": 4
+            },
+            "renameByName": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Pods per Node (current)",
+      "description": "Number of pods scheduled on each Linux machine (pod .spec.nodeName). Written by monitor_k3s_health.sh; only populated from the deploy date forward.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 4,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"kube_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"k8s_pods_per_node\" and r._field == \"pods\")\n  |> group(columns: [\"node\"])\n  |> last()\n  |> keep(columns: [\"node\", \"_value\"])",
+          "queryType": "flux",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "displayName": "${__field.labels.node}",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left"
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Pods per Node Trend",
+      "description": "Pod placement over time, one series per Linux machine.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 27,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"kube_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"k8s_pods_per_node\" and r._field == \"pods\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"node\"])",
+          "queryType": "flux",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": true,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Pods per Application (current)",
+      "description": "Pod count per application, derived from the owning workload (ReplicaSet/StatefulSet/DaemonSet/Job) with the generated hash suffix stripped, so replicas collapse into one row.",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "dfdkew37wk1dse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 12,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"kube_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"k8s_pods_per_app\" and r._field == \"pods\")\n  |> group(columns: [\"namespace\", \"app\"])\n  |> last()\n  |> group()\n  |> keep(columns: [\"namespace\", \"app\", \"_value\"])\n  |> rename(columns: {_value: \"pods\"})\n  |> sort(columns: [\"pods\"], desc: true)",
+          "queryType": "flux",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "dfdkew37wk1dse"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "namespace"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 380
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pods"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "displayName",
+                "value": "Pods"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 3
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "_time": true,
+              "_start": true,
+              "_stop": true,
+              "host": true,
+              "_measurement": true,
+              "result": true,
+              "table": true
+            },
+            "indexByName": {
+              "namespace": 0,
+              "app": 1,
+              "pods": 2
             },
             "renameByName": {}
           }
