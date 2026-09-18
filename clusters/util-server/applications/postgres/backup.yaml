@@ -1,0 +1,80 @@
+# postgres backups — nightly pg_dump of the shared Postgres to the NAS.
+#
+# The DB lives on util-server's LOCAL disk (local-path), so it is NOT protected
+# by the NAS or by any replication. This CronJob is the backup story: a custom
+# -format dump per day, on an nfs-client PVC, with simple age-based retention.
+#
+# Restore (single DB):
+#   kubectl exec -n ai postgres-0 -- createdb -U postgres grafana_restore
+#   kubectl exec -i -n ai <backup-pod> -- pg_restore -U postgres -d grafana_restore /backups/<file>.dump
+# (or copy the dump out with `kubectl cp` and restore anywhere).
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backup-pvc
+  namespace: ai
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: ai
+  labels:
+    app: postgres-backup
+spec:
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: pg-dump
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PGHOST
+                  value: postgres.ai.svc.cluster.local
+                - name: PGUSER
+                  value: postgres
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secrets
+                      key: POSTGRES_PASSWORD
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  STAMP="$(date +%Y%m%d-%H%M%S)"
+                  for db in grafana openwebui; do
+                    echo "dumping $db ..."
+                    pg_dump -Fc -d "$db" -f "/backups/${db}-${STAMP}.dump"
+                  done
+                  echo "--- backups present ---"
+                  ls -lh /backups
+                  # retention: keep 14 days
+                  find /backups -name '*.dump' -type f -mtime +14 -print -delete
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: postgres-backup-pvc

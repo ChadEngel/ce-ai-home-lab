@@ -121,8 +121,11 @@ spec:
       labels:
         app: unpoller
     spec:
-      nodeSelector:
-        kubernetes.io/arch: arm64
+      # NOTE: was `nodeSelector: kubernetes.io/arch: arm64` — removed 2026-09-18.
+      # unpoller's image is a multi-arch index (amd64/arm64/arm/v7), so the pin
+      # only ever worked because util-server was the sole arm64 node. With
+      # util-server now tainted control-plane-only, unpoller runs on the amd64
+      # work-horse nodes.
       # The distroless unpoller image has no shell; run as the image's user (0).
       securityContext:
         runAsNonRoot: false

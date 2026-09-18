@@ -123,14 +123,18 @@ spec:
       targetPort: 3000
 
 ---
+# ReadWriteMany: grafana now runs 2 replicas (one per work-horse node) and they
+# share this directory for plugins/images. The SQLite DB that used to live here
+# is gone — state moved to Postgres (clusters/util-server/applications/postgres)
+# so that multiple writers are safe. Previously `grafana-pvc`, ReadWriteOnce.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: grafana-pvc
+  name: grafana-data
   namespace: ai
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   storageClassName: nfs-client
   resources:
     requests:
@@ -145,11 +149,12 @@ metadata:
   labels:
     app: grafana
 spec:
-  replicas: 1
-  # Recreate: single replica with SQLite DB on RWO PVC — two concurrent
-  # grafana processes on the same DB file would risk corruption.
+  replicas: 2
+  # State lives in shared Postgres now, so replicas are interchangeable and we
+  # can roll instead of Recreate. (Was: replicas 1 + Recreate, because SQLite
+  # on an RWO PVC cannot take two writers.)
   strategy:
-    type: Recreate
+    type: RollingUpdate
   selector:
     matchLabels:
       app: grafana
@@ -158,6 +163,17 @@ spec:
       labels:
         app: grafana
     spec:
+      # Spread the two replicas across the work-horse nodes (caelx002/caelx003).
+      # Soft, so one worker being down never blocks scheduling.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: grafana
       initContainers:
         - name: render-datasource
           image: alpine:3.19
@@ -195,6 +211,31 @@ spec:
             - secretRef:
                 name: grafana-secrets
           env:
+            # --- shared Postgres (replaces SQLite-on-NFS) --------------------
+            # `[database] high_availability` defaults to true, so alert state is
+            # coordinated through this shared DB rather than each replica having
+            # its own Alertmanager. If duplicate notifications ever appear, add
+            # a small Redis and set GF_UNIFIED_ALERTING_HA_REDIS_ADDRESS.
+            - name: GF_DATABASE_TYPE
+              value: postgres
+            - name: GF_DATABASE_HOST
+              value: postgres.ai.svc.cluster.local:5432
+            - name: GF_DATABASE_NAME
+              value: grafana
+            - name: GF_DATABASE_USER
+              value: postgres
+            - name: GF_DATABASE_SSL_MODE
+              value: disable
+            - name: GF_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_PASSWORD
+            # Alerting HA: coordinate Alertmanager state through the shared
+            # Redis, so two replicas do not each fire the same notification.
+            # See clusters/util-server/applications/redis/kustomization.yaml.
+            - name: GF_UNIFIED_ALERTING_HA_REDIS_ADDRESS
+              value: redis.ai.svc.cluster.local:6379
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
                 secretKeyRef:
@@ -254,7 +295,7 @@ spec:
             optional: true
         - name: grafana-data
           persistentVolumeClaim:
-            claimName: grafana-pvc
+            claimName: grafana-data
 
 ---
 apiVersion: networking.k8s.io/v1

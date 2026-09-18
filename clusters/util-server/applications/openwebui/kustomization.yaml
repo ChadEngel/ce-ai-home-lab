@@ -49,15 +49,41 @@ spec:
   type: ClusterIP
 
 ---
+# Static PV bound to the SAME NFS directory the old `openwebui-pvc` used, so
+# uploaded files / RAG data (and the retired webui.db) carry over untouched.
+# Access mode is now ReadWriteMany because openwebui runs 2 replicas on
+# different nodes. The SQLite DB itself is retired in favour of Postgres
+# (DATABASE_URL), so the shared directory no longer has a single-writer
+# constraint — it only holds files now.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: openwebui-data-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-client
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: 192.168.30.121
+    path: /data/pod_data/ai-openwebui-pvc-pvc-71c08885-7aaf-430a-aa96-b2937089a689
+  claimRef:
+    namespace: ai
+    name: openwebui-data
+
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: openwebui-pvc
+  name: openwebui-data
   namespace: ai
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   storageClassName: nfs-client
+  volumeName: openwebui-data-pv
   resources:
     requests:
       storage: 5Gi
@@ -102,11 +128,20 @@ metadata:
   labels:
     app: openwebui
 spec:
-  replicas: 1
-  # Recreate: SQLite (webui.db) on RWO PVC — never run two instances against
-  # the same DB file during a rollout surge.
+  replicas: 2
+  # State is in shared Postgres now, so replicas are interchangeable and we can
+  # roll. (Was: replicas 1 + Recreate, because SQLite webui.db on an RWO PVC
+  # cannot take two writers.)
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    # maxSurge 0: the work-horse nodes cannot fit a *surge* copy of this pod
+    # (1 CPU / 2Gi request) while the previous replica is still running. Without
+    # this the rollout deadlocks (2nd new pod Pending on Insufficient memory)
+    # and the old pod is never released. Replace-then-start = a short single-
+    # replica window during rollouts, which is fine for a UI.
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: openwebui
@@ -116,21 +151,18 @@ spec:
         app: openwebui
     spec:
       affinity:
-        nodeAffinity:
-          # Prefer the dedicated worker node (caelx002) so the control-plane
-          # node (util-server) stays free for cluster services, but allow
-          # scheduling elsewhere if caelx002 is unavailable, so a node outage
-          # doesn't take the app down. Pod auto-migrates back when caelx002
-          # recovers. Strong preference (weight 100) keeps openwebui off
-          # util-server in normal operation.
+        # Spread the two replicas across the work-horse nodes (soft, so one
+        # worker being down never blocks scheduling). Replaces the old
+        # "prefer caelx002" pin — util-server is control-plane + data-layer only
+        # now (it carries the control-plane taint).
+        podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100
-              preference:
-                matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values:
-                      - caelx002
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: openwebui
       containers:
         - name: openwebui
           # Track upstream releases: `latest` tag + Always pull. Pod restarts
@@ -170,20 +202,20 @@ spec:
             - name: HF_HUB_OFFLINE
               value: "1"
             # --- SQLite journal mode ------------------------------------------------
-            # Open WebUI defaults DATABASE_ENABLE_SQLITE_WAL=True, which runs
-            # `PRAGMA journal_mode=WAL` on every connection. WAL's win is concurrent
-            # readers-during-write — useless for a single uvicorn worker — and its
-            # `-shm` index is an mmap'd shared-memory file that is NOT safe on NFS
-            # (our webui.db lives on the nfs-client PVC). DELETE mode uses a plain
-            # rollback journal (regular file, NFS-safe) and the switch auto-
-            # checkpoints + removes the existing -wal/-shm files on next connect.
-            - name: DATABASE_ENABLE_SQLITE_WAL
-              value: "false"
-            # DELETE journal mode is only crash-safe with synchronous=FULL (NORMAL
-            # is safe only under WAL). Write rate is tiny (chat history), so the
-            # per-commit fsync is negligible. Keeps the DB integrity-safe on power loss.
-            - name: DATABASE_SQLITE_PRAGMA_SYNCHRONOUS
-              value: "FULL"
+            # --- shared Postgres (replaces SQLite webui.db) ------------------------
+            # Removes the SQLite single-writer constraint, which is what allows
+            # the app to run 2 replicas. URL comes from the postgres-secrets sync.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: OPENWEBUI_DATABASE_URL
+            # --- shared Redis (socket.io adapter) ---------------------------------
+            # Multi-replica websockets need a shared adapter: without it a client's
+            # socket lands on one replica while HTTP requests round-robin to the
+            # other, which breaks streaming chat responses.
+            - name: WEBSOCKET_REDIS_URL
+              value: redis://redis.ai.svc.cluster.local:6379/1
           resources:
             requests:
               cpu: 1
@@ -211,4 +243,4 @@ spec:
       volumes:
         - name: openwebui-data
           persistentVolumeClaim:
-            claimName: openwebui-pvc
+            claimName: openwebui-data

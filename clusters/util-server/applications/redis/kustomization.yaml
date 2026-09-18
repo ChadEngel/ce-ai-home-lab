@@ -1,0 +1,90 @@
+# redis — small shared Redis for multi-replica coordination.
+#
+# WHY
+#   Two consumers need it once apps run >1 replica:
+#     1. grafana  — [unified_alerting] ha_redis_address: without a coordination
+#                   backend, each replica runs its own Alertmanager and fires
+#                   DUPLICATE notifications for the same alert rule.
+#     2. openwebui — WEBSOCKET_REDIS_URL: socket.io needs a shared adapter so a
+#                   client's websocket lands on the right replica. Without it,
+#                   chat streaming breaks when requests round-robin between pods.
+#
+#   This is deliberately a SEPARATE instance from `infisical-redis` — mixing
+#   Infisical's cache keyspace with alerting/websocket state would couple
+#   unrelated failure domains (and flushing one would break the other).
+#
+# EPHEMERAL BY DESIGN
+#   No persistence (--save "" --appendonly no): this holds coordination state,
+#   not data. If it restarts, alerting re-elects and websockets reconnect.
+#   Nothing here is worth backing up.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: ai
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: ai
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      # Part of the "data layer": keeps it on the control-plane node with
+      # Postgres, off the disposable work horses.
+      nodeSelector:
+        kubernetes.io/hostname: util-server
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          # Ephemeral: coordination only, no RDB/AOF.
+          args: ["redis-server", "--save", "", "--appendonly", "no"]
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 5

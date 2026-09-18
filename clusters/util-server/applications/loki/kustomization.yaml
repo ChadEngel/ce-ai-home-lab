@@ -291,6 +291,13 @@ spec:
       # hop, and intake survives a worker outage.
       nodeSelector:
         kubernetes.io/hostname: util-server
+      # util-server was tainted control-plane-only on 2026-09-18. promtail must
+      # tolerate that taint to stay pinned here — it is the target of the UDM's
+      # syslog NodePort, so moving it would break UDM log intake.
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: promtail
           image: grafana/promtail:3.6.11

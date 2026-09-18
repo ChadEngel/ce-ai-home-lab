@@ -175,8 +175,9 @@ spec:
         app: pushover-bridge
     spec:
       restartPolicy: Always
-      nodeSelector:
-        kubernetes.io/arch: arm64
+      # NOTE: was `nodeSelector: kubernetes.io/arch: arm64` — removed 2026-09-18.
+      # python:3.12-alpine is multi-arch; the pin only worked while util-server
+      # was the sole arm64 node. Now scheduled on the amd64 work-horse nodes.
       containers:
         - name: bridge
           image: python:3.12-alpine

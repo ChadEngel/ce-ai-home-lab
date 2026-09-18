@@ -147,8 +147,9 @@ spec:
         app: udm-thermal
     spec:
       restartPolicy: Always
-      nodeSelector:
-        kubernetes.io/arch: arm64
+      # NOTE: was `nodeSelector: kubernetes.io/arch: arm64` — removed 2026-09-18.
+      # alpine:3.19 is multi-arch; the pin only worked while util-server was the
+      # sole arm64 node. Now scheduled on the amd64 work-horse nodes.
       containers:
         # Alpine image is writable, so the main container installs its own deps
         # (curl + sshpass + ssh) at startup before launching the poller. A

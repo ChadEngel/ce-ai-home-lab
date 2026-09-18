@@ -1,0 +1,149 @@
+# postgres — shared Postgres for stateful apps that must run >1 replica.
+#
+# WHY THIS EXISTS
+#   grafana and openwebui (and, pending upstream support, bifrost) each keep
+#   their state in SQLite *on the NFS PVC*. SQLite over NFS is safe for exactly
+#   one writer — which is why all of those Deployments are `replicas: 1` +
+#   `strategy: Recreate`. That means: lose a node and the app is down until the
+#   pod reschedules; you can never run a replica on each worker.
+#
+#   Moving their state into Postgres removes the single-writer constraint, so
+#   the apps can run 2 replicas (one per work-horse node) with anti-affinity.
+#
+# WHERE IT LIVES
+#   Pinned to `util-server` — the control-plane node — so the "data layer" is
+#   deliberately separated from the disposable work-horse workers (caelx002 /
+#   caelx003). This does NOT introduce a new single point of failure:
+#   util-server is already the cluster's only control-plane, and with a
+#   single-server SQLite datastore nothing can reschedule anywhere while it is
+#   down. Putting the DB anywhere else WOULD add a new failure domain (a worker
+#   loss would take the data layer with it).
+#
+#   Storage is `local-path` (node-local disk) rather than NFS: Postgres on NFS
+#   is a known footgun (fsync/locking semantics), and since the pod is pinned
+#   to util-server by design, local-path's node-affinity is a feature, not a
+#   limitation. Backups go to the NAS via scripts/deploy-postgres.sh (see the
+#   pg_dump CronJob it installs).
+#
+# SECRETS
+#   `postgres-secrets[POSTGRES_PASSWORD]` is created by scripts/deploy-postgres.sh
+#   from Infisical (`POSTGRES_PASSWORD`) — never committed here. The apps that
+#   consume this DB read their connection password from the same K8s Secret.
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: ai
+data:
+  # Runs only when the data directory is first initialised (empty PGDATA).
+  # One database per app that has moved off SQLite-on-NFS.
+  init-databases.sql: |
+    CREATE DATABASE grafana;
+    CREATE DATABASE openwebui;
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ai
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: ai
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      # Pin to the control-plane node: "data layer" stays off the work horses.
+      nodeSelector:
+        kubernetes.io/hostname: util-server
+      # util-server carries the standard control-plane taint (2026-09-18), so
+      # anything that is meant to live there must tolerate it.
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        # local-path volumes are created root-owned; postgres runs as uid 999.
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_PASSWORD
+            # Keep PGDATA in a subdir so the volume root stays free for
+            # lost+found / future sidecars.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi
