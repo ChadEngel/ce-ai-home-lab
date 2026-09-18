@@ -102,7 +102,10 @@ at `/var/lib/grafana/dashboards/default`.
   - **UDM Fan Speed** — a companion panel under the Gateway row graphing the
     `udm_thermal` `fan1_rpm`/`fan2_rpm` (adt7475 hwmon) that the same
     `udm-thermal` collector reads over SSH. Fan2 is the exhaust fan that
-    tracks SoC load; Fan1 is often idle (0 RPM) on the UDM Pro. The **UDM CPU &
+    tracks SoC load; the panel draws a red threshold line at **800 RPM** to
+    match the `UDM SoC fan stall` alert (fan2 has never read below ~1113 RPM in
+    normal operation). Fan1 is an **unpopulated** channel on this UDM Pro and
+    always reads 0, so it is dashed and labelled as such. The **UDM CPU &
     Memory** panel also plots `udm_thermal.mem_used_pct`, and **UDM Load
     Average** plots `udm_thermal.load1`, so temp/memory/load line up.
   - **UDM Health & Reboots** row — **UDM Uptime / Reboots** (`udm_thermal.

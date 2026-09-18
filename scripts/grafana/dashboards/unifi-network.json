@@ -1460,7 +1460,7 @@
       "id": 25,
       "type": "timeseries",
       "title": "UDM Fan Speed",
-      "description": "udm_thermal.fan1_rpm / fan2_rpm from the SSH udm-thermal collector (adt7475 hwmon). Correlate with UDM Temperature: Fan2 (exhaust) should ramp up as SoC rises.",
+      "description": "udm_thermal.fan1_rpm / fan2_rpm from the SSH udm-thermal collector (adt7475 hwmon). Fan2 (exhaust) ramps with SoC and has never read below ~1113 RPM in normal operation; a sustained drop under 800 RPM means the exhaust fan has stalled \u2014 the precursor to the 105C thermal shutdown. Fan1 is an unpopulated channel (always 0) on this UDM Pro. The red threshold marks the 800 RPM fan-stall alert line (UDM SoC fan stall).",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -1508,6 +1508,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 800
               }
             ]
           }
@@ -1521,7 +1525,13 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Fan1 (intake)"
+                "value": "Fan1 (intake, unpopulated)"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash"
+                }
               }
             ]
           },

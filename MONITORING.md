@@ -156,6 +156,11 @@ thermal zone, fans, board temps, uptime, load and memory, then writes a
 are what make a **shutdown/reboot visible** (an `up=0` gap, then an `uptime_s`
 reset).
 
+> **Thermal note:** the UDM SoC has ~15 °C of headroom at idle and its
+temperature is essentially **uncorrelated with CPU load** — it tracks board/
+ambient temperature and fan RPM instead. Do not expect CPU graphs to explain a
+hot SoC. See [UDM alerts](#udm-alerts-grafana--pushover--iphone).
+
 > Note: this collector is the *only* on-device dependency — it reads sysfs over
 > SSH. It does **not** require any service installed on the UDM. A legacy
 > `telegraf-custom.service` (left over from the old on-UDM setup, failing in a
@@ -239,8 +244,17 @@ the `severity` label: `critical` vs `info`).
 | Alert | Condition | Severity |
 |-------|-----------|----------|
 | **UDM SoC temperature high** | `soc_temp_c >= 90` for 1m | critical |
+| **UDM SoC fan stall** | `fan2_rpm < 800` for 2m | critical |
 | **UDM offline (unreachable)** | `up == 0` for 2m | critical |
 | **UDM rebooted** | `uptime_s < 300` (fresh boot) | info |
+
+Why the fan-stall rule exists: the UDM's SoC idles around 79–86 °C with very
+little thermal headroom, and its temperature is **not** driven by CPU load
+(correlation ~0.15), so "hot" arrives with little warning. The exhaust fan
+(`fan2`) is the cooling that matters and has *never* read below ~1113 RPM in
+normal operation, so a sustained drop under 800 RPM means it has stalled — the
+precursor to the 105 °C thermal shutdown. Note `fan1` is an **unpopulated**
+channel on this UDM Pro and always reads 0, so the rule keys on `fan2` only.
 
 Together these capture a shutdown from both sides: the device going dark
 (`up=0`) and coming back (uptime reset). When one fires, open the
