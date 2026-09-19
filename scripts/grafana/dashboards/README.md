@@ -23,6 +23,19 @@ at `/var/lib/grafana/dashboards/default`.
     CPU (millicores), memory (KiB), and restart count, joined from
     `k8s_pod_resources` + `k8s_pod_restarts`. Cells with high restart counts
     are highlighted (yellow ≥1, red ≥5) as a crude OOMKilled indicator.
+  - **Pods per Node (current)** — bar gauge of pods scheduled on each Linux
+    machine, from `k8s_pods_per_node` (the `node` tag is the pod's
+    `.spec.nodeName`, *not* the collector host).
+  - **Pods per Node Trend** — the same per-node counts over time.
+  - **Pods per Application (current)** — table of pod count per application,
+    from `k8s_pods_per_app`. The application is the owning
+    ReplicaSet/StatefulSet/DaemonSet/Job name with the generated hash suffix
+    stripped (`grafana-6c9bf985c8` → `grafana`), so replicas collapse into a
+    single row.
+
+  > **Note:** `k8s_pods_per_node` and `k8s_pods_per_app` are only written by
+  > collector versions that include the placement change. Panels using them
+  > are empty for time ranges that predate the collector redeploy.
 
 - **`pod-resource-utilization.json`** — `CE AI Lab — Pod Resource Utilization`
   Utilization-over-time companion to the health dashboard, for capacity
