@@ -210,6 +210,20 @@ spec:
                 secretKeyRef:
                   name: postgres-secrets
                   key: OPENWEBUI_DATABASE_URL
+            # --- shared JWT signing key ------------------------------------------
+            # Both replicas MUST sign/verify JWTs with the same key, or tokens
+            # issued by one pod are rejected by the other (401 after login).
+            # Without this env var Open WebUI generates a local key per pod
+            # (.webui_secret_key in the container filesystem, not the shared PVC),
+            # which is exactly what produced the login-loop bug.
+            # Value comes from Infisical (OPENWEBUI_SECRET_KEY) via the
+            # openwebui-secrets-sync CrD → K8s Secret openwebui-secrets[WEBUI_SECRET_KEY].
+            - name: WEBUI_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui-secrets
+                  key: WEBUI_SECRET_KEY
+                  optional: true
             # --- shared Redis (socket.io adapter) ---------------------------------
             # Multi-replica websockets need a shared adapter: without it a client's
             # socket lands on one replica while HTTP requests round-robin to the
