@@ -41,6 +41,8 @@ are available as K8s Secrets before any service that depends on them:
 | `deploy-openwebui.sh`  | Open WebUI chat interface       | https://ai.caehomelab.com |
 | `deploy-searxng.sh`    | SearXNG metasearch engine       | https://search.caehomelab.com |
 | `deploy-grafana.sh`    | Grafana + auto-provisioned dashboards | https://grafana.caehomelab.com |
+| `deploy-grafana-alerts.sh` | Provision Grafana alert rules, folders, contact point, notification policy | (Grafana alerting) |
+| `verify-grafana.sh`    | **Read-only** check of Grafana alerts/dashboards vs the repo; exits non-zero on drift | (diagnostic) |
 | `deploy-loki.sh`       | Loki + Promtail (UDM syslog intake, 15-day retention); adds Loki datasource to Grafana | https://loki.caehomelab.com |
 | `add-k3s-node.sh`       | Add a worker (agent) node to the cluster (secrets from Infisical) | (cluster node) |
 | `install-telegraf.sh`  | Install/configure Telegraf on a Linux box -> InfluxDB `host_metrics` | (host metrics) |

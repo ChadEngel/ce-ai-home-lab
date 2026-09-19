@@ -18,3 +18,5 @@ tmp/
 *.key
 id_rsa*
 id_ed25519*
+# pi session transcripts (large HTML dumps from agent sessions)
+pi-session-*.html

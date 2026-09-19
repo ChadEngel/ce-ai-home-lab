@@ -37,6 +37,19 @@ at `/var/lib/grafana/dashboards/default`.
   > collector versions that include the placement change. Panels using them
   > are empty for time ranges that predate the collector redeploy.
 
+- **`mac-system-monitor.json`** — `Mac System Monitor`
+  macOS host metrics from the **`mac_metrics`** bucket (Telegraf), with a
+  `$host` template variable (e.g. `mac-aibeast`). 18 panels covering CPU
+  (total, over time, per-core), memory (usage, breakdown, %, total), disk
+  (usage by mount, I/O), network traffic, and process counts.
+
+  > **History:** this dashboard was created in the Grafana UI and lived only in
+  > the old SQLite database, so it was silently dropped by the SQLite→Postgres
+  > migration (commit `c1d77d2`). It was recovered from
+  > `ai-grafana-pvc-pvc-2122b421-a940-4706-a952-8f28627e7d44/grafana.db` on NFS
+  > and committed here so the file provider owns it from now on. See the
+  > "How Grafana state gets lost" section in `MONITORING.md`.
+
 - **`pod-resource-utilization.json`** — `CE AI Lab — Pod Resource Utilization`
   Utilization-over-time companion to the health dashboard, for capacity
   planning. Same datasource / `kube_metrics` bucket / Flux. A `$namespace`

@@ -282,6 +282,14 @@ and every rule) are provisioned idempotently by:
 ./scripts/deploy-grafana-alerts.sh
 ```
 
+> ⚠️ **Never delete the `UDM Alerts` or `Infrastructure Alerts` folders from the
+> Grafana UI.** Deleting a folder cascades to its alert rules, and in Grafana 13
+> the folder browser can show a folder containing rules as **empty** (rules moved
+> to the `rules.alerting.grafana.app` store while the browser reads the legacy
+> table). This silently removed all 7 rules once. To remove a rule, delete the
+> rule file and re-run the script; to inspect what a folder really holds use
+> `./scripts/verify-grafana.sh`.
+
 Each rule's source of truth is a file in `scripts/grafana/alerts/*.json` (the
 `query → reduce → threshold` data pipeline). Add/edit a file and re-run the
 script to update the live rules. Grafana file provisioning only covers rules
@@ -295,6 +303,76 @@ instead.
   pods, stuck PV count, and trend graphs.
 - **CE AI Lab – Pod Resources & OOM Monitoring** (`ceai-pod-resources`):
   per-pod CPU and memory, plus a table of pods that have restarted.
+- **Mac System Monitor** (`mac-system-monitor`): macOS host metrics from the
+  `mac_metrics` bucket (Telegraf), with a `$host` variable (`mac-aibeast`, …).
+
+## Verifying Grafana state (read-only)
+
+```bash
+./scripts/verify-grafana.sh
+```
+
+Reports health, replica/DB shape, alert rules vs `scripts/grafana/alerts/*.json`,
+contact point + notification policy, dashboards vs `scripts/grafana/dashboards/`
+and the ConfigMap, and a Postgres tombstone audit. Exits non-zero on drift.
+
+**Why this exists:** `GET /api/v1/provisioning/alert-rules` returns `[]`
+identically for "never existed" and "was deleted", so an HTTP-only check gives
+no way to tell whether to re-deploy or investigate. Always prefer this script
+over ad-hoc API probing.
+
+## How Grafana state gets lost (and how to tell)
+
+Three distinct mechanisms, all observed in this lab:
+
+1. **Folder deletion cascades to alert rules.** Deleting a folder in the UI
+   (`withDescendants`) removes its alert rules, *even when the folder looks
+   empty*. Grafana 13 moved rules to the app-platform store
+   (`rules.alerting.grafana.app`) while the folder browser reads the legacy
+   table, so a folder containing rules can render as empty. Log signature:
+   `folder-service ... "deleting folder with descendants"` followed by
+   `ngalert.scheduler ... reason="context canceled\nrule deleted"`.
+   Recovery: `./scripts/deploy-grafana-alerts.sh` (rules are defined in the repo).
+2. **File-provider deletion.** The `grafana-dashboards-json` ConfigMap is
+   mounted at `/var/lib/grafana/dashboards/default` with `disableDeletion: false`,
+   so any key missing from the ConfigMap is deleted from Grafana.
+   `deploy-grafana.sh` is additive by default for this reason; `--prune` opts in.
+3. **Database migrations.** The SQLite→Postgres cutover (commit `c1d77d2`)
+   carried over only dashboards re-created by the file provider. Any dashboard
+   that existed solely in the SQLite DB was dropped — this is how
+   **Mac System Monitor** was lost (recovered from
+   `ai-grafana-pvc-pvc-2122b421-a940-4706-a952-8f28627e7d44/grafana.db` on NFS
+   `192.168.30.121:/data/pod_data` and committed as
+   `mac-system-monitor.json`).
+
+**Auditing deletions:** `alert_rule_version` in the `grafana` Postgres DB
+survives rule deletion (the legacy `alert_rule` table does not), and
+`resource_history` records every create/update/delete for dashboards and
+folders (`action`: 1=create, 2=update, 3=delete). Query with:
+
+```bash
+PGPASS=$(kubectl get secret postgres-secrets -n ai -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+kubectl exec -n ai postgres-0 -- env PGPASSWORD="$PGPASS" psql -U postgres -d grafana \
+  -c "select distinct title from alert_rule_version order by title;"
+```
+
+### Recovering an old SQLite dashboard
+
+The pre-Postgres PVC directories still exist on NFS. To inspect them, mount the
+NFS export in a throwaway pod (the provisioner image is distroless and has no
+shell):
+
+```bash
+kubectl run nfs-probe --rm -it --image=alpine:3.19 -n ai --restart=Never \
+  --overrides='{"spec":{"containers":[{"name":"p","image":"alpine:3.19","command":["sh"],"stdin":true,"tty":true,"volumeMounts":[{"name":"r","mountPath":"/pod_data","readOnly":true}]}],"volumes":[{"name":"r","nfs":{"server":"192.168.30.121","path":"/data/pod_data","readOnly":true}}]}}'
+```
+
+Then read `grafana.db` from `ai-grafana-pvc-pvc-*/` with `sqlite3`: in Grafana 13
+the dashboards live in the `resource` table (`group='dashboard.grafana.app'`,
+`value` = full dashboard JSON), **not** the `dashboard` table, which is empty.
+Restore via `POST /apis/dashboard.grafana.app/v2beta1/namespaces/default/dashboards`,
+then export the classic v1 JSON (`/api/dashboards/uid/<uid>`) into
+`scripts/grafana/dashboards/` so the file provider owns it permanently.
 
 ## Verify data is flowing
 
