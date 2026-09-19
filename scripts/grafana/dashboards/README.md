@@ -102,7 +102,10 @@ at `/var/lib/grafana/dashboards/default`.
   - **UDM Fan Speed** — a companion panel under the Gateway row graphing the
     `udm_thermal` `fan1_rpm`/`fan2_rpm` (adt7475 hwmon) that the same
     `udm-thermal` collector reads over SSH. Fan2 is the exhaust fan that
-    tracks SoC load; Fan1 is often idle (0 RPM) on the UDM Pro. The **UDM CPU &
+    tracks SoC load; the panel draws a red threshold line at **800 RPM** to
+    match the `UDM SoC fan stall` alert (fan2 has never read below ~1113 RPM in
+    normal operation). Fan1 is an **unpopulated** channel on this UDM Pro and
+    always reads 0, so it is dashed and labelled as such. The **UDM CPU &
     Memory** panel also plots `udm_thermal.mem_used_pct`, and **UDM Load
     Average** plots `udm_thermal.load1`, so temp/memory/load line up.
   - **UDM Health & Reboots** row — **UDM Uptime / Reboots** (`udm_thermal.
@@ -189,6 +192,24 @@ what caused the old dashboards to show no data).
 Edit the JSON here, then re-run `./scripts/deploy-grafana.sh` (it rebuilds the
 ConfigMap and restarts Grafana's file-provider pickup). Or edit live in the
 Grafana UI and export back to this file.
+
+### Dashboard deletion safety
+
+The dashboard ConfigMap is mounted at `/var/lib/grafana/dashboards/default` and
+Grafana's file provider runs with `disableDeletion: false`, so **any dashboard
+missing from the ConfigMap is deleted from Grafana's database**. To keep a
+stale/incomplete checkout from silently removing live dashboards,
+`deploy-grafana.sh` is **additive by default**:
+
+- Live dashboards with no local `*.json` are **preserved** (re-applied
+  byte-for-byte from their current ConfigMap value) and reported loudly.
+- `--prune` makes the local directory authoritative — dashboards absent locally
+  are deleted (the old behavior). Use it for intentional removals.
+- It **refuses to run** if the local dashboard directory is empty.
+
+If you see `live dashboard(s) have no local *.json — PRESERVING them`, that
+dashboard exists only in the cluster. Export it and commit it here so it is
+tracked.
 
 ## Removed (historical)
 
