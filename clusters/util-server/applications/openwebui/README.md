@@ -27,6 +27,13 @@ the path.
 - **Secret:** `OPENWEBUI_OLLAMA_BASE_URL` (must end in `/v1`),
   `BIFROST_OLLAMA_KEY` — both synced from Infisical.
 
+## Authentication
+
+The default install uses local accounts (first signup becomes admin).
+For family use, the recommended path is **OIDC against your Entra
+tenant** — single sign-on with MFA, no per-user password to manage.
+Runbook: [`../../../../docs/openwebui-entra-oidc.md`](../../../../docs/openwebui-entra-oidc.md).
+
 ## Foot-guns
 
 - **OpenAI vs. Ollama URL.** Bifrost speaks the OpenAI API
