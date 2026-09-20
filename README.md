@@ -60,7 +60,6 @@ and external services. Full hardware/network/storage details live in
 | `helm` | Install Traefik / cert-manager charts | <https://helm.sh/docs/intro/install/> |
 | `k3s` | The cluster runtime (on the node) | `curl -sfL https://get.k3s.io \| sh -` |
 | `nfs-common` | NFS client on the k3s node | `apt install nfs-common` |
-| (optional) `flux` | GitOps path under `clusters/.../flux/` | <https://fluxcd.io/installation/> |
 
 ### External services / accounts
 
@@ -232,7 +231,7 @@ names/addresses/IPs.
 | `aiserver.home:8086` | InfluxDB v2 endpoint | Grafana datasource, metrics scripts |
 | InfluxDB org `home`, bucket `kube_metrics` | Monitoring bucket | `scripts/monitor_k3s_health.sh`, Grafana dashboards |
 | `you@example.com` | Let's Encrypt account email | `networking/cert-manager/clusterissuer.yaml` |
-| `ChadEngel/ce-ai-home-lab` | GitHub repo URL (Flux GitRepository) | `clusters/util-server/flux/gitops-secrets.yml`, `flux/apps.yaml` |
+| `ChadEngel/ce-ai-home-lab` | GitHub repo URL (the `git clone` target) | `SETUP.md`, `DEPLOYMENT_STATUS.md` |
 | Infisical org `caehomelab`, project `secret-management`, env `prod` | Infisical coordinates | `applications/infisical-operator/`, scripts/infisical-agent*.sh |
 
 Quick find-and-replace from the repo root:
