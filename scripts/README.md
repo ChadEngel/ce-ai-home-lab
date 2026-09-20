@@ -108,16 +108,6 @@ one-time setup, documented in the runbook).
 
 ## Troubleshooting
 
-### `kubectl apply -f <directory>/` fails with validation errors
-
-Directories like `clusters/util-server/applications/openwebui/` may contain
-`_values/values.yaml` (Helm-style) which lacks `apiVersion`/`kind`. Always
-either:
-- use the per-app `deploy-*.sh` script (which applies only the
-  kustomization.yaml), or
-- apply the kustomization file directly:
-  `kubectl apply -f clusters/util-server/applications/searxng/kustomization.yaml`.
-
 ### Secret changes don't take effect
 
 Restart the deployment:
