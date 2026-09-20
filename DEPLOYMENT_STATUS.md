@@ -1,6 +1,13 @@
 # Deployment Status
 
-Last verified: 2026-07-18 (k3s `v1.35.5+k3s1` on `util-server`).
+**Snapshot of cluster state.** This document is updated when the cluster
+state changes; re-run `./scripts/check-deployments.sh` and
+`./scripts/deployment-test.sh` for current verification (the test script
+exits 0 on green).
+
+Last manual verification of the table below: **2026-07-18** (k3s
+`v1.35.5+k3s1` on `util-server`). Individual fixes below are dated as
+they happened.
 
 ## Services
 
@@ -85,20 +92,6 @@ All certificates are issued by Let's Encrypt via the Cloudflare DNS-01 solver:
   `kubectl run ... --rm --image=curlimages/curl` so cluster DNS
   resolves; SearXNG `/healthcheck` → `/` (no such endpoint exists);
   Infisical `:3000/health` → `:8080/api/status`. All 42 tests pass.
-
-## Stale resources in cluster (not in any kustomization)
-
-These are leftover from the LiteLLM era and can be deleted:
-
-```bash
-kubectl delete cm -n ai openwebui-env openwebui-ollama-config litellm-config
-kubectl delete secret -n ai litellm-secrets
-kubectl delete pvc -n ai litellm-pvc
-kubectl delete secret -n ai litellm-tls           # ingress now uses bifrost-tls
-```
-
-(Do this after confirming the new `bifrost-tls` Secret is being
-read by the ingress — it's already present, so this is safe.)
 
 ## Infisical Kubernetes Operator (secret sync)
 
@@ -205,8 +198,13 @@ kubectl -n ai logs -l app=promtail --tail=30
 
 ## Verification
 
+Re-run for current state:
+
 ```bash
-./scripts/deployment-test.sh
+./scripts/check-deployments.sh    # quick status table (pods, svcs, ingresses, pvc, secrets)
+./scripts/deployment-test.sh      # pass/fail summary (exits non-zero on drift)
+./scripts/verify-grafana.sh       # read-only Grafana dashboard + alert drift check
 ```
 
-Result: 42 tests, 42 passed, 0 failed, 0 warnings.
+Result at last manual run: **42 tests, 42 passed, 0 failed, 0 warnings**
+(the test harness itself has grown since then; rerun for the current count).
