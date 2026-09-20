@@ -5,20 +5,25 @@ state changes; re-run `./scripts/check-deployments.sh` and
 `./scripts/deployment-test.sh` for current verification (the test script
 exits 0 on green).
 
-Last manual verification of the table below: **2026-07-18** (k3s
-`v1.35.5+k3s1` on `util-server`). Individual fixes below are dated as
-they happened.
+Last manual verification of the table below: **2026-09-20** (k3s
+`v1.35.5+k3s1` on `util-server`, single control-plane + 2 workers
+`caelx002` / `caelx003`). Individual fixes below are dated as they
+happened.
 
 ## Services
 
 | Service | URL | Status | Notes |
 |---|---|---|---|
-| Open WebUI | `https://ai.caehomelab.com` | ✅ Running | image `:latest` + `imagePullPolicy: Always` (tracks upstream releases; restarts pick up new builds — v0.11.3 at time of writing); talks to Bifrost; no providers configured yet (you must add them at `https://llm.caehomelab.com`) |
-| Bifrost    | `https://llm.caehomelab.com` | ✅ Running | Add providers via web UI (Settings → Providers) |
+| Open WebUI | `https://ai.caehomelab.com` | ✅ Running (2 replicas) | image `:latest` + `imagePullPolicy: Always` (tracks upstream releases; restarts pick up new builds — v0.11.3 at time of writing); talks to Bifrost via the OpenAI-compatible API; no providers configured yet (you must add them at `https://llm.caehomelab.com`) |
+| Bifrost    | `https://llm.caehomelab.com` | ✅ Running | Add providers via web UI (Settings → Providers); `log_retention_days=3` in `client_config` (kept the multi-GB-on-NFS `logs.db` stall from recurring; post-VACUUM size 546 MB on the `bifrost-pvc` PVC) |
 | SearXNG    | `https://search.caehomelab.com` | ✅ Running | Settings mounted from `searxng-settings` ConfigMap |
-| Infisical  | `https://secrets.caehomelab.com` | ✅ Running | |
-| Grafana    | `https://grafana.caehomelab.com` | ✅ Running | Datasource connected to InfluxDB v2 on `aiserver.home:8086`; dashboards loaded |
+| Infisical  | `https://secrets.caehomelab.com` | ✅ Running | Hosts the operator's `secret-management`/`prod` project (CLOUDFLARE_API_TOKEN, INFLUXDB_TOKEN, etc.) |
+| Grafana    | `https://grafana.caehomelab.com` | ✅ Running (2 replicas) | Datasource connected to InfluxDB v2 in-cluster at `http://influxdb.ai.svc.cluster.local:8086` (org `home`, bucket `kube_metrics`); 7 dashboards + 7 alert rules loaded; Postgres-backed with shared Redis dedup |
 | Loki       | `https://loki.caehomelab.com` | ✅ Running | Log aggregation (Loki 3.7.4 single-binary, filesystem-on-NFS, 15-day retention); Promtail ingests UDM syslog via UDP NodePort `192.168.30.217:30014`; added as a Grafana datasource (uid `loki`) |
+| InfluxDB v2 | (LAN-only) `https://influxdb.caehomelab.com` | ✅ Running | In-cluster (org `home`, buckets `kube_metrics` / `network_metrics` / `host_metrics`); data migrated from `aiserver.home` 2026-07-28 (see `docs/migrate-influxdb-to-k8s.md` for the runbook) |
+| Postgres   | (internal only) | ✅ Running | `postgres-0` StatefulSet pinned to `util-server` on `local-path`; backs Grafana + Open WebUI to enable multi-replica; daily logical backups via `postgres-backup` CronJob (last 3 runs Completed) |
+| Redis      | (internal only) | ✅ Running | Ephemeral `--save "" --appendonly no`; backs Grafana unified alerting (`ha_redis_address`) + Open WebUI websocket sticky session; deliberately separate from `infisical-redis` |
+| Pushover bridge | (internal only) | ✅ Running | Grafana Unified Alerting webhook → Pushover; routes the 7 infra alerts to Pushover with priority from `severity` label |
 | Ollama     | `http://aiserver.home:11434` | external | Runs on a separate host, not in this cluster |
 
 ## Certificates
@@ -33,8 +38,9 @@ All certificates are issued by Let's Encrypt via the Cloudflare DNS-01 solver:
 | `loki-tls`           | `loki.caehomelab.com`   | ✅ Ready |
 | `infisical-ssl-certs` | `secrets.caehomelab.com` | ✅ Ready |
 | `grafana-tls`         | `grafana.caehomelab.com` | ✅ Ready |
+| `influxdb-tls`        | `influxdb.caehomelab.com` | ✅ Ready |
 
-## Recently fixed (this commit)
+## Recreate + digest-pinning pass (pre-2026-09)
 
 - **InfluxDB rollout deadlock** — `replicas:1` + RWO PVC + default
   RollingUpdate strategy meant `kubectl rollout restart` deadlocked: the new
@@ -61,7 +67,7 @@ All certificates are issued by Let's Encrypt via the Cloudflare DNS-01 solver:
 - **Script hygiene** — `set -euo pipefail` added to check-deployments.sh,
   deployment-test.sh, debug-pods.sh.
 
-### Earlier fixes
+### Pre-2026-09 fixes
 
 - **Grafana datasource auth** — the InfluxDB datasource wasn't passing
   the token (the `secureJsonData.token` path silently fails on this
@@ -92,6 +98,31 @@ All certificates are issued by Let's Encrypt via the Cloudflare DNS-01 solver:
   `kubectl run ... --rm --image=curlimages/curl` so cluster DNS
   resolves; SearXNG `/healthcheck` → `/` (no such endpoint exists);
   Infisical `:3000/health` → `:8080/api/status`. All 42 tests pass.
+
+### 2026-09-20 fixes
+
+- **Bifrost `logs.db` growth on NFS stalling `/health`** — the default
+  `log_retention_days: 365` with full content logging had grown
+  `logs.db` to ~1.47 GB on the RWO NFS PVC, and the resulting fsync /
+  lock contention on every `kubectl exec` was timing out `/health` for
+  ~75 minutes. Set `log_retention_days=3` via `PUT /api/config`
+  (Bifrost's `/api/config` accepts the full client_config body),
+  rolled the pod so the cleanup routine re-initializes, then ran
+  `VACUUM` against `logs.db` (scaled Bifrost to 0, ephemeral helper
+  pod with `sqlite3` — Bifrost's alpine image doesn't ship it,
+  `PRAGMA wal_checkpoint(TRUNCATE)` + `VACUUM` took 25s). File size
+  went 1,471,422,464 → 545,722,368 bytes (~925 MB reclaimed).
+  Documented in the comment block at the top of
+  `clusters/util-server/applications/bifrost/kustomization.yaml`.
+
+- **`service recovering` Grafana alert flapping on sub-minute blips**
+  — the rule fired on every 20-second probe miss, masking real
+  recoveries. Replaced the `min()` reduction (which only suppresses
+  when every sample in the lookback window is 0, i.e. nothing) with
+  a `count() >= 2` join that requires ≥2 failed probes in the 10-min
+  window before the rule fires. Sustained outages (`Down` rule fires
+  with `for: 1m`) still trigger recovering correctly; single 20s
+  blips (1 zero probe) age out silently.
 
 ## Infisical Kubernetes Operator (secret sync)
 
@@ -189,9 +220,11 @@ kubectl -n ai logs -l app=promtail --tail=30
 2. **Point the UDM Pro at Loki** — UniFi Network -> System Settings ->
    Advanced -> Syslog Server: host `192.168.30.217`, port `30014`, UDP.
    Then verify labels appear in Loki and build a UDM logs Grafana dashboard.
-3. **(Optional) Monitor `aiserver`** (the InfluxDB host itself) — one more
-   `./scripts/install-telegraf.sh aiserver.home` run; not in the original
-   2-boxes + Proxmox scope.
+3. **(Optional) Monitor `aiserver.home`** (the Ollama host) — one more
+   `./scripts/install-telegraf.sh aiserver.home` run; would push to
+   `host_metrics` like the other boxes, and Ollama would benefit from
+   the GPU thermal + load metrics. Not in the original 2-boxes +
+   Proxmox scope.
 4. **(Optional) Revoke the bootstrap service token** `st.51f02f1e-…` once
    you no longer need CLI administration; the operator uses the Machine
    Identity, not the service token.
@@ -206,5 +239,6 @@ Re-run for current state:
 ./scripts/verify-grafana.sh       # read-only Grafana dashboard + alert drift check
 ```
 
-Result at last manual run: **42 tests, 42 passed, 0 failed, 0 warnings**
-(the test harness itself has grown since then; rerun for the current count).
+Result at last manual run (2026-09-20): **58 tests, 55 passed, 0 failed,
+3 warnings**. The 3 warnings are the `postgres-backup-*` CronJob pods
+sitting in `Succeeded` status, which is correct for a CronJob.
