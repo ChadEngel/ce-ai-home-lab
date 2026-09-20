@@ -1,10 +1,23 @@
 # Bifrost AI Gateway (replaces LiteLLM)
 # https://github.com/maximhq/bifrost
-# 
+#
 # OpenAI-compatible API gateway with web UI for provider configuration.
 # - Port 8080 (Bifrost default HTTP server)
 # - Web UI at / on the Ingress
 # - Configure providers (Ollama, OpenRouter, etc.) via the UI after deployment
+#
+# ---- Post-deploy configuration (Bifrost has no declarative settings here) ----
+# After first deploy, configure these in the UI or via the API. They are
+# persisted to /app/data/config.db on the PVC, so they survive pod restarts
+# but NOT PVC recreation. Re-apply after a fresh deploy or rebuilt PVC.
+#
+# 1. Providers (Ollama, OpenRouter, etc.) - required for inference.
+# 2. log_retention_days: set to 3 (default is 365). The default kept a SQLite
+#    log DB on NFS growing unboundedly, which produced lock/fsync stalls that
+#    timed out /health. With 3-day retention + a one-time VACUUM, logs.db
+#    stays bounded around 500 MB.
+#    API: PUT /api/config {"client_config":{"log_retention_days":3}}
+#    Restart the pod so the log cleanup routine re-reads the new value.
 
 ---
 apiVersion: v1
