@@ -10,7 +10,7 @@
     "severity": "info"
   },
   "annotations": {
-    "summary": "{{ $labels.service }} is RECOVERING \u2014 it was down within the last 10 minutes but is responding again."
+    "summary": "{{ $labels.service }} is RECOVERING \u2014 it recorded at least two failed probes in the last 10 minutes and is responding again."
   },
   "data": [
     {
@@ -26,7 +26,7 @@
           "type": "influxdb",
           "uid": "dfdkew37wk1dse"
         },
-        "query": "svcUp = from(bucket: \"kube_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"service_health\" and r._field == \"up\")\n  |> group(columns: [\"service\"])\ncurrent = svcUp |> last() |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"current\"})\nrecent = svcUp |> min() |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"recent\"})\njoin(tables: {c: current, r: recent}, on: [\"service\"])\n  |> map(fn: (r) => ({ service: r.service, _value: if r.current == 0.0 then 0.0 else if r.recent == 0.0 then 1.0 else 2.0 }))\n  |> map(fn: (r) => ({ r with _time: now() }))\n  |> keep(columns: [\"_time\", \"service\", \"_value\"])"
+        "query": "svcUp = from(bucket: \"kube_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"service_health\" and r._field == \"up\")\n  |> group(columns: [\"service\"])\ncurrent = svcUp |> last() |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"current\"})\ndownCount = svcUp |> filter(fn: (r) => r._value == 0.0) |> count() |> keep(columns: [\"service\", \"_value\"]) |> rename(columns: {_value: \"downCount\"})\njoin(tables: {c: current, d: downCount}, on: [\"service\"])\n  |> map(fn: (r) => ({ service: r.service, _value: if r.current == 0.0 then 0.0 else if r.downCount >= 2.0 then 1.0 else 2.0 }))\n  |> map(fn: (r) => ({ r with _time: now() }))\n  |> keep(columns: [\"_time\", \"service\", \"_value\"])"
       }
     },
     {
