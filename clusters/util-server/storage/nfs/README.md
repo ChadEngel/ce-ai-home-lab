@@ -44,7 +44,7 @@ election and tune the lease durations instead of disabling it.
 ## NFS server prerequisites
 
 See [`PREREQUISITES.md`](../../../PREREQUISITES.md) and
-[`persistant_nfs_mount.md`](../../../persistant_nfs_mount.md):
+[`persistent_nfs_mount.md`](../../../persistent_nfs_mount.md):
 
 - NFS server exporting `192.168.30.121:/data/pod_data`
 - `nfs-common` installed on the k3s node

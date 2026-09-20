@@ -79,7 +79,7 @@ and external services. Full hardware/network/storage details live in
 
 1. Install k3s (above).
 2. Install `nfs-common` and mount the NFS export — see
-   [`persistant_nfs_mount.md`](./persistant_nfs_mount.md).
+   [`persistent_nfs_mount.md`](./persistent_nfs_mount.md).
 3. Copy the k3s kubeconfig to your workstation:
    `scp node:/etc/rancher/k3s/k3s.yaml ~/.kube/config` and edit the server URL.
 
@@ -107,7 +107,7 @@ same Traefik IP, so internal and external clients get the same answer.
 ├── homelab_build.md         (build notes)
 ├── DEPLOYMENT_STATUS.md     (current service status)
 ├── MONITORING.md            (InfluxDB/Grafana metrics setup)
-├── persistant_nfs_mount.md  (NFS export + node mount steps)
+├── persistent_nfs_mount.md  (NFS export + node mount steps)
 ├── .gitignore               (excludes backups/ and local secrets)
 ├── docs/
 ├── clusters/
