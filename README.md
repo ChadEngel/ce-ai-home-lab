@@ -47,41 +47,16 @@ domain/IPs/secrets coordinates to your own, and `kubectl apply`.
 
 ## Prerequisites
 
-Before you can apply anything in this repo, you need the following tooling
-and external services. Full hardware/network/storage details live in
-[`PREREQUISITES.md`](./PREREQUISITES.md).
+Hardware sizing, network requirements, and the full setup checklist live
+in [`PREREQUISITES.md`](./PREREQUISITES.md). The short version:
 
-### Tools to install (on your workstation / deploy host)
-
-| Tool | Why | Install |
-|---|---|---|
-| `git` | Clone this repo | `apt install git` / Homebrew |
-| `kubectl` | Apply manifests, check status | <https://kubernetes.io/docs/tasks/tools/> |
-| `helm` | Install Traefik / cert-manager charts | <https://helm.sh/docs/intro/install/> |
-| `k3s` | The cluster runtime (on the node) | `curl -sfL https://get.k3s.io \| sh -` |
-| `nfs-common` | NFS client on the k3s node | `apt install nfs-common` |
-
-### External services / accounts
-
-- **A domain** managed in **Cloudflare** (for DNS-01 TLS issuance).
-- **A Cloudflare API token** with `Zone:DNS:Edit` on that zone.
-- **An NFS server** exporting a share for persistent volumes.
-- **An InfluxDB v2** instance (for the Grafana monitoring dashboards). Optional —
-  only needed if you want the cluster-health metrics. **It is NOT deployed by
-  this repo** — it runs on a separate host (`aiserver.home:8086` here). If you
-  want monitoring, run your own InfluxDB v2 and repoint the Grafana datasource
-  + `scripts/monitor_k3s_health.sh` at it (see the Monitoring section).
-- **Let's Encrypt** — used automatically by cert-manager (no account needed
-  beyond an email address).
-- **Tailscale** (optional) — for remote access to the LAN.
-
-### On the cluster node
-
-1. Install k3s (above).
-2. Install `nfs-common` and mount the NFS export — see
-   [`persistent_nfs_mount.md`](./persistent_nfs_mount.md).
-3. Copy the k3s kubeconfig to your workstation:
-   `scp node:/etc/rancher/k3s/k3s.yaml ~/.kube/config` and edit the server URL.
+- **Tools**: `git`, `kubectl`, `helm`, `k3s` (on the node), `nfs-common` (on the node).
+- **External**: a domain in Cloudflare (with a `Zone:DNS:Edit` API token),
+  an NFS server, optionally InfluxDB v2 for monitoring (or skip the
+  monitoring stack entirely), and optionally Tailscale for remote access.
+- **Node setup**: install k3s, mount the NFS export (see
+  [`persistent_nfs_mount.md`](./persistent_nfs_mount.md)), then copy
+  the kubeconfig to your workstation and edit the server URL.
 
 ## DNS
 
@@ -101,37 +76,34 @@ same Traefik IP, so internal and external clients get the same answer.
 
 ```
 .
-├── README.md
-├── PREREQUISITES.md
-├── SETUP.md                 (physical topology / setup log)
-├── homelab_build.md         (build notes)
-├── DEPLOYMENT_STATUS.md     (current service status)
-├── MONITORING.md            (InfluxDB/Grafana metrics setup)
-├── persistent_nfs_mount.md  (NFS export + node mount steps)
-├── .gitignore               (excludes backups/ and local secrets)
-├── docs/
+├── README.md                   (you are here)
+├── PREREQUISITES.md            (hardware sizing, network, full setup checklist)
+├── DEPLOYMENT_STATUS.md        (cluster snapshot; verification scripts in scripts/)
+├── MONITORING.md               (InfluxDB/Grafana metrics setup)
+├── persistent_nfs_mount.md     (NFS export + node mount steps)
+├── homelab_build.md            (historical build log from 2026-06-25; see docs/)
+├── .gitignore                  (excludes backups/, agent transcripts, local secrets)
+├── docs/                       (how-tos, rotation runbooks, integration notes)
 ├── clusters/
 │   └── util-server/
 │       ├── namespaces/
-│       ├── networking/        (cert-manager, traefik)
-│       ├── storage/           (nfs provisioner)
+│       ├── networking/         (cert-manager, traefik)
+│       ├── storage/            (nfs provisioner)
 │       └── applications/
 │           ├── bifrost/
 │           ├── openwebui/
-│           ├── infisical/
+│           ├── infisical/      (+ infisical-operator/)
 │           ├── searxng/
 │           ├── grafana/
 │           ├── ollama/         (README only — runs on external host)
 │           └── mcpo/           (README only — image not published)
-├── scripts/
-│   ├── deploy-*.sh
-│   ├── check-deployments.sh
-│   ├── deployment-test.sh
-│   ├── debug-pods.sh
-│   └── monitor_k3s_health.sh
+└── scripts/                    (deploy, verify, host-integration helpers; see scripts/README.md)
 ```
 
-(backups/ and other local snapshots are gitignored — see `.gitignore`.)
+`scripts/README.md` is the entry point for **how to deploy this lab from
+scratch** — the per-app `deploy-*.sh` scripts and the orchestrator
+`deploy-all.sh`. The cluster is updated imperatively from this repo; the
+manifests are GitOps-friendly but no GitOps controller is installed.
 
 ## Quick start
 
@@ -231,7 +203,7 @@ names/addresses/IPs.
 | `aiserver.home:8086` | InfluxDB v2 endpoint | Grafana datasource, metrics scripts |
 | InfluxDB org `home`, bucket `kube_metrics` | Monitoring bucket | `scripts/monitor_k3s_health.sh`, Grafana dashboards |
 | `you@example.com` | Let's Encrypt account email | `networking/cert-manager/clusterissuer.yaml` |
-| `ChadEngel/ce-ai-home-lab` | GitHub repo URL (the `git clone` target) | `SETUP.md`, `DEPLOYMENT_STATUS.md` |
+| `ChadEngel/ce-ai-home-lab` | GitHub repo URL (the `git clone` target) | `DEPLOYMENT_STATUS.md`, `scripts/README.md` |
 | Infisical org `caehomelab`, project `secret-management`, env `prod` | Infisical coordinates | `applications/infisical-operator/`, scripts/infisical-agent*.sh |
 
 Quick find-and-replace from the repo root:

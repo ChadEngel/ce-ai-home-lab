@@ -1,6 +1,11 @@
 # Homelab Kubernetes Build Notes
 **Date:** 2026-06-25
 
+> **Historical.** This is the build log from the initial k3s cluster
+> bring-up. The cluster manifests in `clusters/util-server/` and the
+> deploy scripts in `scripts/` are the live source of truth — read this
+> for context and decisions, but the manifests are authoritative.
+
 ## Purpose
 
 This document captures the initial build, discoveries, lessons learned, and final architectural decisions made while building a new Kubernetes environment on a single-node k3s cluster.
