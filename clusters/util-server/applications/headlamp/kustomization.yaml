@@ -1,0 +1,240 @@
+# Headlamp — Kubernetes web UI (read-only) for the ai namespace + cluster.
+#
+# WHAT THIS IS NOT: a metrics backend. Headlamp renders what the API server
+# already knows (objects, events, logs, YAML) and draws CPU/mem sparklines from
+# metrics-server. It stores no history and does no alerting. Historical metrics
+# stay in InfluxDB -> Grafana (see MONITORING.md). Headlamp answers "why is this
+# pod crash-looping right now", which the 60s InfluxDB writer cannot.
+#
+# Auth model — token only:
+#   1. Headlamp's own k8s auth: the user pastes a ServiceAccount token. RBAC
+#      decides what it can do. This is Headlamp's recommended in-cluster model.
+#   2. We run WITHOUT `-unsafe-use-service-account-token`, so the pod's
+#      ServiceAccount is never implicitly used as every visitor's identity.
+#
+# There is deliberately NO ingress basic auth. An earlier revision added a
+# Traefik Middleware + htpasswd Secret; it was removed because a shared
+# password is a worse gate than a per-user, RBAC-scoped, expiring token, and
+# it prompted on every visit. Do not re-add it without also reconsidering the
+# token flow.
+#
+# RBAC is read-only and deliberately EXCLUDES secrets:
+#   * bound to the built-in `view` ClusterRole (pods, deployments, logs, ...)
+#   * plus `headlamp-cluster-read` for cluster-scoped objects Headlamp expects
+#     (nodes, PVs, StorageClasses, CRDs, ...)
+#   * NOT secrets. `view` omits secrets by design, and we do not add them: the
+#     ai namespace holds `infisical-universal-auth` (clientSecret = read access
+#     to every Infisical secret) and every TLS private key. Exposing those
+#     through a shared-password web UI is a real escalation path. Headlamp
+#     degrades gracefully without it. See README.md to opt in.
+#
+# Deploy: ./scripts/deploy-headlamp.sh
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: headlamp
+  namespace: ai
+
+---
+# Cluster-scoped read access. Kept separate from the `view` binding below so we
+# don't fork a copy of `view`'s rules (which would drift as k8s adds to it).
+# NOTE: no `secrets`, no `clusterroles`/`clusterrolebindings`.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: headlamp-cluster-read
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - namespaces
+      - persistentvolumes
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources:
+      - storageclasses
+      - csidrivers
+      - csinodes
+      - volumeattachments
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingressclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiregistration.k8s.io"]
+    resources: ["apiservices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["node.k8s.io"]
+    resources: ["runtimeclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-cluster-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: headlamp-cluster-read
+subjects:
+  - kind: ServiceAccount
+    name: headlamp
+    namespace: ai
+
+---
+# Built-in `view`: namespaced read of workloads, pods, logs, events, services,
+# ingress, configmaps, PVCs, endpoints. Deliberately excludes secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: headlamp
+    namespace: ai
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: headlamp
+  namespace: ai
+  labels:
+    app: headlamp
+spec:
+  type: ClusterIP
+  selector:
+    app: headlamp
+  ports:
+    - port: 80
+      targetPort: 4466
+      name: http
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headlamp
+  namespace: ai
+  labels:
+    app: headlamp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: headlamp
+  template:
+    metadata:
+      labels:
+        app: headlamp
+    spec:
+      serviceAccountName: headlamp
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: headlamp
+          # Digest-pinned 2026-09 to Headlamp v0.45.0 (multi-arch index digest;
+          # resolves to linux/amd64 on the caelx nodes). To upgrade: resolve the
+          # new tag's index digest and bump deliberately, then verify the UI
+          # loads and `kubectl`-equivalent views work.
+          image: ghcr.io/headlamp-k8s/headlamp@sha256:db3f0e0fc58d358d41daa3fe7fc852437552c7ee873c3645470f7b86a8e0db49
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-in-cluster"
+            - "-in-cluster-context-name=homelab"
+            # NOTE: `-unsafe-use-service-account-token` is intentionally NOT set.
+            # With it, every visitor is silently served as this pod's
+            # ServiceAccount and Headlamp never prompts -- but then there is no
+            # per-user identity at all, and the only gate would be whatever sits
+            # in front of the ingress. We want the token prompt: a pasted token
+            # is per-user, RBAC-scoped, and expires.
+            #
+            # Do not add it back unless you also add a real per-user auth proxy
+            # (OIDC / forward-auth) in front.
+          ports:
+            - containerPort: 4466
+              name: http
+          # Headlamp serves its SPA at /. 0.45.0 has no dedicated health route.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: headlamp-ingress
+  namespace: ai
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # No Traefik middleware: auth is Headlamp's own token prompt. See the
+    # "Auth model" note at the top of this file before adding one.
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - headlamp.caehomelab.com
+      secretName: headlamp-tls
+  rules:
+    - host: headlamp.caehomelab.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: headlamp
+                port:
+                  number: 80
