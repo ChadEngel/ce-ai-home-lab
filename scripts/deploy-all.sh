@@ -17,6 +17,7 @@
 #   5. searxng            - Search engine
 #   6. grafana            - Monitoring dashboard (needs influxdb-secrets from Infisical)
 #   7. loki               - Log aggregation (Loki + Promtail syslog intake for the UDM)
+#   8. headlamp           - Read-only k8s web UI (ServiceAccount token login)
 #
 # Note: MCPo is not deployed (no published Docker images yet)
 # Note: Ollama runs on separate server aiserver.home, not in Kubernetes
@@ -77,6 +78,11 @@ echo ""
 echo ">>> Step 7: Deploying Loki + Promtail..."
 $SCRIPT_DIR/deploy-loki.sh
 
+# Step 8: Deploy Headlamp (read-only k8s UI).
+echo ""
+echo ">>> Step 8: Deploying Headlamp (read-only k8s UI)..."
+$SCRIPT_DIR/deploy-headlamp.sh
+
 # Grafana must be restarted so its datasource init container re-renders the
 # Loki entry (added to grafana-datasources ConfigMap) on a fresh pod boot.
 echo ""
@@ -95,6 +101,7 @@ echo "  Bifrost API: https://llm.caehomelab.com  (configure providers via web UI
 echo "  Infisical:   https://secrets.caehomelab.com"
 echo "  Grafana:     https://grafana.caehomelab.com"
 echo "  Loki:        https://loki.caehomelab.com   (UDM syslog -> 192.168.30.217:30014 UDP, 15-day retention)"
+echo "  Headlamp:    https://headlamp.caehomelab.com   (read-only k8s UI; ServiceAccount token login)"
 echo ""
 echo "Run './scripts/deployment-test.sh' to verify everything is healthy."
 echo ""
