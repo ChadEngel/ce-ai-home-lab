@@ -46,13 +46,14 @@ Requests = guaranteed/reserved; limits = burst ceiling.
 | bifrost | 25m | 500m | 128 MiB | 512 MiB | ~1m / ~55 MiB (bursts on streaming) |
 | grafana | 50m | 250m | 128 MiB | 512 MiB | ~25m / ~125 MiB |
 | searxng | 50m | 250m | 192 MiB | 512 MiB | ~1m / ~110 MiB |
+| headlamp | 25m | 250m | 64 MiB | 512 MiB | ~5m / ~90 MiB (bursts on large list views) |
 | nfs-provisioner | 10m | 100m | 16 MiB | 64 MiB | ~2m / ~6 MiB |
-| **App subtotal** | **510m** | **3.7** | **~2.7 GiB** | **~8.2 GiB** | |
+| **App subtotal** | **535m** | **3.95** | **~2.8 GiB** | **~8.7 GiB** | |
 
 System pods (k3s / Traefik / coredns / metrics-server / cert-manager /
 Infisical operator) add roughly **~0.2 core / ~0.2 GiB** of requests on top.
 
-**Total requests: ~0.7 core CPU, ~3.0 GiB RAM. Total limits: ~4.2 core CPU, ~9.2 GiB RAM.**
+**Total requests: ~0.75 core CPU, ~3.1 GiB RAM. Total limits: ~4.5 core CPU, ~9.7 GiB RAM.**
 
 To re-measure on your own node:
 ```bash
