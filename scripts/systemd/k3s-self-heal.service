@@ -1,0 +1,12 @@
+[Unit]
+Description=Self-heal k3s hung-NFS-mount wedge
+Documentation=file:///Users/chadengel/dev/ce-ai-lab/UDM_REPLACEMENT.md
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=-/etc/ce-ai-lab/k3s-self-heal.env
+ExecStart=/usr/local/bin/k3s-self-heal.sh
+TimeoutStartSec=120
+Nice=10
