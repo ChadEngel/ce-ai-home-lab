@@ -2,21 +2,28 @@
 # udm-rsyslog-update.sh — point UDM Pro's rsyslogd setting at our syslog receiver.
 #
 # Required env:
-#   UDM_HOST          -- e.g. 192.168.250.1 or unifi.lab
+#   UDM_HOST          -- e.g. 192.168.250.1 (default), unifi.home, or
+#                        setup.ui.com during first boot
 #   UDM_ADMIN_USER    -- Infisical UDM_ADMIN_USER (default: fetched from Infisical)
-#   UDM_ADMIN_PASS    -- Infisical UDM_ADMIN_PASSWORD or UDM_ROOT_PASSWORD
-#   RECEIVER_HOST     -- DNS or IP of the syslog receiver (e.g. caelx004.home)
+#   UDM_ADMIN_PASS    -- Infisical UDM_ROOT_PASSWORD or UDM_SSH_PASS
+#   RECEIVER_HOST     -- IP or DNS of the syslog receiver
+#                        (default: 192.168.30.189 == caelx004.home)
 #   RECEIVER_PORT     -- default 1514
 #
+# Uses the UniFi OS login API (cookie session) — the X-API-KEY integration
+# token is controller-side and not what UniFi OS / Network 9+ expects for
+# /api/s/default/rest/setting/rsyslogd on a freshly adopted controller.
+#
 # Behaviour:
-#   1. GET /rest/setting/rsyslogd -> current settings
-#   2. Modify: enabled=true, ip=RECEIVER_HOST, port=RECEIVER_PORT
-#   3. PUT /rest/setting/rsyslogd -> write back
-#   4. Verify by GETting again
+#   1. POST /api/login -> cookie session
+#   2. GET /api/s/default/rest/setting/rsyslogd -> current settings
+#   3. Modify: enabled=true, ip=RECEIVER_HOST, port=RECEIVER_PORT
+#   4. PUT /api/s/default/rest/setting/rsyslogd -> write back
+#   5. Verify by GETting again
 
 set -euo pipefail
 
-RECEIVER_HOST="${RECEIVER_HOST:?RECEIVER_HOST required (e.g. caelx004.home)}"
+RECEIVER_HOST="${RECEIVER_HOST:-192.168.30.189}"  # caelx004.home
 RECEIVER_PORT="${RECEIVER_PORT:-1514}"
 UDM_HOST="${UDM_HOST:-192.168.250.1}"
 

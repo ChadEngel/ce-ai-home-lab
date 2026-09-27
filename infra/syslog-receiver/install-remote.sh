@@ -2,16 +2,20 @@
 # install-remote.sh — run install.sh on a remote host with sudo password.
 #
 # Required env:
-#   REMOTE_HOST       -- SSH host (e.g. 192.168.30.189 or caelx004.home)
+#   REMOTE_HOST       -- SSH host (default: 192.168.30.189 == caelx004.home).
+#                        IP is the safer default during first boot before mDNS
+#                        settles; caelx004.home works once the UDM's host
+#                        records are in place (or once the host advertises
+#                        itself via Tailscale / Avahi).
 #   REMOTE_USER       -- SSH user (default: cengel)
 #   REMOTE_KEY        -- SSH private key (default: ~/.ssh/homelab-agent-util-server,
 #                        materialized from Infisical LINUX_PVT_KEY if missing)
-#   LOKI_URL          -- Loki endpoint (e.g. http://loki.ai.svc.cluster.local:3100)
+#   LOKI_URL          -- Loki endpoint (e.g. http://192.168.30.217:3100)
 #   SUDO_PASS         -- sudo password for REMOTE_USER (used via `sudo -S`)
 #
 # Optional env:
 #   LISTEN_ADDR       default 0.0.0.0:1514
-#   SPOOL_DIR         default /var/log/udm-pro
+#   DATA_DIR          default /data/udm-pro  (must be a separate mount, see README)
 #   RETENTION_DAYS    default 7
 #   ENABLE_TS         default 0
 #   TS_AUTHKEY        default ""
@@ -29,7 +33,7 @@
 
 set -euo pipefail
 
-REMOTE_HOST="${REMOTE_HOST:?REMOTE_HOST required (e.g. 192.168.30.189)}"
+REMOTE_HOST="${REMOTE_HOST:-192.168.30.189}"  # caelx004.home
 REMOTE_USER="${REMOTE_USER:-cengel}"
 REMOTE_KEY="${REMOTE_KEY:-$HOME/.ssh/homelab-agent-util-server}"
 
@@ -77,7 +81,7 @@ ssh $SSH_BASE "$REMOTE_USER@$REMOTE_HOST" bash <<REMOTE
 export SUDO_PASS='$(printf '%s' "$SUDO_PASS")'
 export LOKI_URL='$LOKI_URL'
 export LISTEN_ADDR='${LISTEN_ADDR:-0.0.0.0:1514}'
-export SPOOL_DIR='${SPOOL_DIR:-/var/log/udm-pro}'
+export DATA_DIR='${DATA_DIR:-/data/udm-pro}'
 export RETENTION_DAYS='${RETENTION_DAYS:-7}'
 export ENABLE_TS='${ENABLE_TS:-0}'
 export TS_AUTHKEY='${TS_AUTHKEY:-}'
@@ -86,9 +90,11 @@ chmod +x install.sh
 bash ./install.sh
 REMOTE
 
+_LISTEN_PORT="${LISTEN_ADDR:-0.0.0.0:1514}"
+_LISTEN_PORT="${_LISTEN_PORT##*:}"   # strip "host:" prefix
 echo
 echo "==> verifying receiver listening on UDP ${LISTEN_ADDR:-0.0.0.0:1514}"
-ssh $SSH_BASE "$REMOTE_USER@$REMOTE_HOST" "ss -uln | grep -E ':$(echo "${LISTEN_ADDR:-0.0.0.0:1514}" | sed 's/.*://')' || echo '(not bound yet)'
+ssh $SSH_BASE "$REMOTE_USER@$REMOTE_HOST" "ss -uln | grep -E ':${_LISTEN_PORT}\b' || echo '(not bound yet)'"
 
 echo
 echo "==> done. To uninstall:"

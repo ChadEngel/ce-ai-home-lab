@@ -1,17 +1,20 @@
-# Loki log aggregation stack (Loki single-binary + Promtail syslog intake).
+# Loki log aggregation stack (Loki single-binary).
 #
 # What this deploys:
 #   1. Loki 3.7.4 single-binary (filesystem storage on NFS, 15-day retention)
-#   2. Promtail 3.6.11 with a UDP syslog receiver, exposed as a NodePort so the
-#      UDM Pro can stream logs into the cluster
-#   3. TLS ingress at https://loki.caehomelab.com (cert-manager + letsencrypt-prod,
+#   2. TLS ingress at https://loki.caehomelab.com (cert-manager + letsencrypt-prod,
 #      wildcard *.caehomelab.com -> 192.168.30.217 resolves automatically)
 #
 # Architecture:
-#   UDM Pro --(syslog UDP)--> 192.168.30.217:30014 (NodePort)
-#          --> promtail:1514/udp --> loki:3100/loki/v1/push
+#   UDM Pro --(syslog UDP)--> caelx004:1514 (syslog-ng, see infra/syslog-receiver/)
+#                          --> Loki POST 192.168.30.217:3100/loki/api/v1/push
 #   Grafana queries Loki via the in-cluster Service (http://loki.ai.svc:3100);
 #   the public SSL endpoint is for the browser/Loki UI only.
+#
+# NOTE: the syslog intake is OUT of cluster -- see infra/syslog-receiver/.
+# Promtail and Vector syslog receivers previously lived here but neither parses
+# RFC 3164 (UDM's format); syslog-ng on caelx004 does, and stays up when the
+# cluster is down.
 #
 # Retention: limits_config.retention_period = 360h (15 days). The compactor
 # (retention_enabled: true, runs in-process in the single binary) sweeps the
@@ -210,127 +213,3 @@ spec:
                 port:
                   number: 3100
 
----
-# Promtail: receives UDM syslog over UDP and pushes to Loki.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: promtail-config
-  namespace: ai
-data:
-  promtail.yaml: |
-    server:
-      http_listen_port: 9080
-      grpc_listen_port: 0
-
-    positions:
-      filename: /tmp/positions.yaml
-
-    clients:
-      - url: http://loki.ai.svc.cluster.local:3100/loki/v1/push
-
-    scrape_configs:
-      - job_name: udm-syslog
-        syslog:
-          listen_address: "0.0.0.0:1514"
-          listen_protocol: "udp"
-          use_incoming_timestamp: true
-          use_rfc5424_message: false
-        relabel_configs:
-          - source_labels: [__syslog_message_hostname]
-            target_label: host
-          - source_labels: [__syslog_message_app_name]
-            target_label: app
-          - source_labels: [__syslog_message_facility]
-            target_label: facility
-          - source_labels: [__syslog_message_severity]
-            target_label: severity
-          - source_labels: [__syslog_message_proc_id]
-            target_label: proc_id
-
----
-# NodePort UDP exposing promtail's syslog receiver to the LAN.
-# UDM Pro -> Settings -> System Settings -> Advanced -> Syslog Server:
-#   Host: 192.168.30.217   Port: 30014   Protocol: UDP
-apiVersion: v1
-kind: Service
-metadata:
-  name: promtail-syslog
-  namespace: ai
-spec:
-  type: NodePort
-  selector:
-    app: promtail
-  ports:
-    - name: syslog-udp
-      port: 1514
-      protocol: UDP
-      targetPort: 1514
-      nodePort: 30014
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: promtail
-  namespace: ai
-  labels:
-    app: promtail
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: promtail
-  template:
-    metadata:
-      labels:
-        app: promtail
-    spec:
-      # Pin to the control-plane node so the UDM's syslog target (the
-      # util-server NodePort IP) lands on a local pod -- no cross-node UDP
-      # hop, and intake survives a worker outage.
-      nodeSelector:
-        kubernetes.io/hostname: util-server
-      # util-server was tainted control-plane-only on 2026-09-18. promtail must
-      # tolerate that taint to stay pinned here — it is the target of the UDM's
-      # syslog NodePort, so moving it would break UDM log intake.
-      tolerations:
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
-          effect: NoSchedule
-      containers:
-        - name: promtail
-          image: grafana/promtail:3.6.11
-          imagePullPolicy: IfNotPresent
-          args: ["-config.file=/etc/promtail/promtail.yaml"]
-          ports:
-            - name: syslog-udp
-              containerPort: 1514
-              protocol: UDP
-            - name: http
-              containerPort: 9080
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: 9080
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          volumeMounts:
-            - name: config
-              mountPath: /etc/promtail
-              readOnly: true
-            - name: positions
-              mountPath: /tmp
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 200m
-              memory: 256Mi
-      volumes:
-        - name: config
-          configMap:
-            name: promtail-config
-        - name: positions
-          emptyDir: {}

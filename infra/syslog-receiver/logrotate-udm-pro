@@ -1,0 +1,18 @@
+# /etc/logrotate.d/udm-pro
+#
+# Daily rotation, @@RETENTION_DAYS@@-day retention, compressed. The spool
+# protects against Loki outages; rotation here is just to bound disk usage.
+@@DATA_DIR@@/*.log {
+    daily
+    missingok
+    rotate @@RETENTION_DAYS@@
+    compress
+    delaycompress
+    notifempty
+    create 0644 syslog syslog
+    sharedscripts
+    postrotate
+        # syslog-ng reopens files on SIGHUP
+        systemctl reload syslog-ng >/dev/null 2>&1 || true
+    endscript
+}
