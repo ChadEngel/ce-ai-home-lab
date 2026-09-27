@@ -43,7 +43,7 @@ data:
     INTERVAL="${INTERVAL:-15}"
     MAC="${MAC:-0c:ea:14:4e:7a:95}"
     export SSHPASS="$UDM_SSH_PASS"
-    SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o ConnectionAttempts=1 -o BatchMode=no -o LogLevel=ERROR"
+    SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o BatchMode=no -o LogLevel=ERROR"
     post() {
       curl -sS -X POST \
         --data-binary "$1" \
@@ -71,7 +71,13 @@ data:
     echo "udm-thermal collector starting: ${UDM_USER}@${UDM_HOST} interval=${INTERVAL}s bucket=${INFLUX_BUCKET}"
     while true; do
       ts="$(date +%s)"
-      out="$(sshpass -e ssh $SSH_OPTS "${UDM_USER}@${UDM_HOST}" 'sh -s' < /tmp/remote_collect.sh 2>/dev/null || echo '')"
+      # Hard-bounded: ConnectTimeout only covers the TCP/SSH handshake. If the
+      # session is ESTABLISHED and then the path drops (or sshd wedges), ssh
+      # blocks forever and the whole collect loop stalls — observed 2026-09-26:
+      # the collector stopped at 02:21 during a UDM/network blip and never
+      # resumed, so udm_thermal went stale on the dashboards. ServerAlive* makes
+      # ssh notice the dead peer (~15s); `timeout 20` is the outer backstop.
+      out="$(timeout 20 sshpass -e ssh $SSH_OPTS "${UDM_USER}@${UDM_HOST}" 'sh -s' < /tmp/remote_collect.sh 2>/dev/null || echo '')"
 
       uptime_s=''; load1=''; memtotal=''; memavail=''; soc_raw=''; fan1=''; fan2=''; bt1=''; bt2=''; bt3=''; mem_used_pct=''
       if [ -n "$out" ]; then
