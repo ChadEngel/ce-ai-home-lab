@@ -27,7 +27,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "WAN Bandwidth \u2014 Comcast (active) & Verizon (failover)",
-      "description": "Internet throughput from the UDM Pro WAN ports. Comcast = eth8 (public IP), Verizon = eth9 (failover). Derived from cumulative rx/tx byte counters \u00d7 8 = bits/sec.",
+      "description": "Internet throughput from the UDM Pro WAN ports. Comcast = eth9 (public IP, active), Verizon = eth8 (failover). Derived from cumulative rx/tx byte counters \u00d7 8 = bits/sec.",
       "datasource": {
         "type": "influxdb",
         "uid": "dfdkew37wk1dse"
@@ -45,7 +45,7 @@
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
           },
-          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg_wan_ports\" and (r._field == \"rx_bytes\" or r._field == \"tx_bytes\"))\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      wan: if r.ifname == \"eth8\" then \"Comcast\" else if r.ifname == \"eth9\" then \"Verizon\" else r.ifname,\n      dir: if r._field == \"rx_bytes\" then \"Download\" else \"Upload\" }))\n  |> group(columns: [\"wan\", \"dir\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"wan\")"
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"usg_wan_ports\" and (r._field == \"rx_bytes\" or r._field == \"tx_bytes\"))\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      wan: if r.ifname == \"eth9\" then \"Comcast\" else if r.ifname == \"eth8\" then \"Verizon\" else r.ifname,\n      dir: if r._field == \"rx_bytes\" then \"Download\" else \"Upload\" }))\n  |> group(columns: [\"wan\", \"dir\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"wan\")"
         }
       ],
       "fieldConfig": {
@@ -110,7 +110,7 @@
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
           },
-          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg_wan_ports\" and r._field == \"rx_bytes\")\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      wan: if r.ifname == \"eth8\" then \"Comcast\" else if r.ifname == \"eth9\" then \"Verizon\" else r.ifname }))\n  |> group(columns: [\"wan\"])\n  |> last()\n  |> yield(name: \"dl\")"
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg_wan_ports\" and r._field == \"rx_bytes\")\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      wan: if r.ifname == \"eth9\" then \"Comcast\" else if r.ifname == \"eth8\" then \"Verizon\" else r.ifname }))\n  |> group(columns: [\"wan\"])\n  |> last()\n  |> yield(name: \"dl\")"
         }
       ],
       "fieldConfig": {
@@ -174,7 +174,7 @@
             "type": "influxdb",
             "uid": "dfdkew37wk1dse"
           },
-          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg_wan_ports\" and r._field == \"tx_bytes\")\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      wan: if r.ifname == \"eth8\" then \"Comcast\" else if r.ifname == \"eth9\" then \"Verizon\" else r.ifname }))\n  |> group(columns: [\"wan\"])\n  |> last()\n  |> yield(name: \"ul\")"
+          "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg_wan_ports\" and r._field == \"tx_bytes\")\n  |> derivative(unit: 1s, nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0,\n      wan: if r.ifname == \"eth9\" then \"Comcast\" else if r.ifname == \"eth8\" then \"Verizon\" else r.ifname }))\n  |> group(columns: [\"wan\"])\n  |> last()\n  |> yield(name: \"ul\")"
         }
       ],
       "fieldConfig": {

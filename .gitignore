@@ -4,8 +4,14 @@
 backups/
 
 # Local scratch / export dirs
+# exports/ also holds the UDM config export + offline secrets cache
+# (secrets-cache.env, *.unf controller backups, kubeconfig, SSH keys, TLS PEMs)
+# — see UDM_REPLACEMENT.md. NEVER commit any of it.
 exports/
 tmp/
+udm-config-*/
+secrets-cache.env
+*.unf
 
 # Editor / OS noise
 .DS_Store

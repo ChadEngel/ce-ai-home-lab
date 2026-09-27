@@ -12,6 +12,7 @@ Last verified: 2026-07-18 (k3s `v1.35.5+k3s1` on `util-server`).
 | Infisical  | `https://secrets.caehomelab.com` | ✅ Running | |
 | Grafana    | `https://grafana.caehomelab.com` | ✅ Running | Datasource connected to InfluxDB v2 on `aiserver.home:8086`; dashboards loaded |
 | Loki       | `https://loki.caehomelab.com` | ✅ Running | Log aggregation (Loki 3.7.4 single-binary, filesystem-on-NFS, 15-day retention); Promtail ingests UDM syslog via UDP NodePort `192.168.30.217:30014`; added as a Grafana datasource (uid `loki`) |
+| UniFi      | `https://unifi.caehomelab.com:8443` | ✅ Running | **DR standby** for the UDM Pro controller (not in `deploy-all.sh`; idle, no devices adopted). Network Application `10.6.106-ls147` pinned by digest + MongoDB 4.4. `hostNetwork` on `caelx003`; DNS-only `unifi.caehomelab.com` → `192.168.30.251`, inform `http://unifi.caehomelab.com:8080/inform`. Mongo on `local-path` at `util-server` (no AVX on the nodes forces 4.4). Failover runbook: `clusters/util-server/applications/unifi/README.md` |
 | Ollama     | `http://aiserver.home:11434` | external | Runs on a separate host, not in this cluster |
 
 ## Certificates

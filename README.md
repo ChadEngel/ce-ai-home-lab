@@ -109,6 +109,7 @@ same Traefik IP, so internal and external clients get the same answer.
 ├── DEPLOYMENT_STATUS.md     (current service status)
 ├── MONITORING.md            (InfluxDB/Grafana metrics setup)
 ├── persistant_nfs_mount.md  (NFS export + node mount steps)
+├── UDM_REPLACEMENT.md       (UDM config handover + lab shutdown/startup runbook)
 ├── .gitignore               (excludes backups/ and local secrets)
 ├── docs/
 ├── clusters/
@@ -122,6 +123,7 @@ same Traefik IP, so internal and external clients get the same answer.
 │           ├── infisical/
 │           ├── searxng/
 │           ├── grafana/
+│           ├── unifi/          (self-hosted UniFi controller + MongoDB)
 │           ├── ollama/         (README only — runs on external host)
 │           └── mcpo/           (README only — image not published)
 ├── scripts/
@@ -266,7 +268,16 @@ Placeholders in the repo are marked `REPLACE_WITH_*`, `*-change-me`, or
 | SearXNG    | Deployment + Ingress | 8080 | `search.caehomelab.com` |
 | Infisical  | Deployment + Ingress | 3000 | `secrets.caehomelab.com` |
 | Grafana    | Deployment + Ingress | 3000 | `grafana.caehomelab.com` |
+| UniFi      | Deployment (hostNetwork) + StatefulSet (MongoDB) | 8443 | `https://unifi.caehomelab.com:8443` (DR standby) |
 | Ollama     | external host        | 11434 | (no public URL) |
+
+> **UniFi** is a **disaster-recovery standby** controller for the UDM Pro's
+> built-in controller — not the live one, and deliberately not in `deploy-all.sh`.
+> It is left idle (no devices adopted). It uses `hostNetwork` so devices can
+> reach the inform endpoint at `http://unifi.caehomelab.com:8080/inform`
+> (DNS-only → `192.168.30.251`) at failover time, and MongoDB 4.4 because the
+> nodes lack AVX. Failover runbook:
+> [`clusters/util-server/applications/unifi/README.md`](./clusters/util-server/applications/unifi/README.md).
 
 ## Monitoring
 

@@ -1,0 +1,382 @@
+# unifi — self-hosted UniFi Network Application (the "controller") in k8s.
+#
+# PURPOSE: DISASTER RECOVERY (DR) STANDBY. NOT part of deploy-all.sh.
+#   The UDM Pro at 192.168.250.1 is the live controller that actually manages the
+#   UniFi fleet; unpoller scrapes it. This instance exists ONLY so that if the
+#   UDM dies (hardware failure, corrupted firmware, bad upgrade) we can keep
+#   managing the network without waiting on replacement hardware: bring this up,
+#   restore the latest controller backup, re-point devices at it. In normal
+#   operation it should be IDLE — no devices adopted, nothing depending on it.
+#
+#   DO NOT adopt devices into this controller during normal operation. A UniFi
+#   device can belong to only ONE controller; adopting here steals it from the
+#   UDM. Adoption (Inform Host Override + `set-inform`) is a FAILOVER step only.
+#   See README.md for the failover runbook.
+#
+# WHAT THIS DEPLOYS
+#   - unifi-mongo : MongoDB 4.4 StatefulSet (the controller's database)
+#   - unifi       : the UniFi Network Application itself (LSIO image), with a
+#                   hostNetwork pod so LAN UniFi devices can reach the inform
+#                   endpoint (http://<node-ip>:8080/inform) and the L2 discovery
+#                   / STUN ports at failover time.
+#
+# COST / OPTIONAL COLD STANDBY
+#   Left at `replicas: 1` the controller idles at ~0.5-1 GiB RAM on caelx003 to
+#   stay warm and be tested. For a true cold standby set `replicas: 0` below and
+#   scale up only when failing over (`kubectl scale deploy/unifi -n ai --replicas=1`).
+#   Details and trade-offs are in README.md.
+#
+# MONGODB 4.4 — DELIBERATE, NOT AN OVERSIGHT
+#   UniFi Network 8.1+ supports MongoDB 3.6–7.0 (9.0 adds 8.0). We pin 4.4
+#   because the k3s nodes are QEMU VMs whose CPU model does NOT expose AVX
+#   (`grep -m1 ^flags /proc/cpuinfo` on caelx002/caelx003 shows sse4_1/sse4_2/
+#   aes but NO avx). MongoDB 5.0+ requires AVX on x86-64 and dies with
+#   SIGILL ("Illegal instruction") on these hosts, so >4.4 cannot run here.
+#   4.4 is EOL upstream, but it is the newest branch that runs without AVX and
+#   is still accepted by the controller. DO NOT bump this image without first
+#   confirming AVX is exposed to the VMs (e.g. set the Proxmox VM CPU type to
+#   `host`), then move 4.4 -> 6.0/7.0 with a mongodump/mongorestore AND
+#   `setFeatureCompatibilityVersion` — MongoDB does not auto-upgrade major
+#   versions.
+#
+# STORAGE
+#   - MongoDB data -> `local-path` (node-local disk) pinned to util-server,
+#     matching the postgres precedent: DBs do not belong on NFS (fsync/locking
+#     semantics), and the control-plane node is already the cluster's "data
+#     layer". This is node-bound; losing util-server means restoring from a
+#     controller backup (see README).
+#   - Controller /config -> `nfs-client` PVC. /config is mostly files (certs,
+#     system.properties, backups); NFS is fine for that and makes the pod
+#     reschedulable across work-horse nodes.
+#
+# NETWORKING
+#   hostNetwork: true on the controller, pinned to caelx003 (192.168.30.251).
+#   UniFi needs port 8080 to stay *8080* for device inform, plus UDP 3478
+#   (STUN), 10001 (AP discovery) and 1900 (L2 discovery) — all of which are
+#   plain device-facing ports, not web traffic, so they do not belong behind
+#   the Traefik ingress. hostNetwork gives the pod the node's network namespace
+#   (real L2 broadcasts, correct source IPs). Because the inform IP is baked
+#   into each adopted device, the pod is pinned to ONE node so that IP is
+#   stable at failover: set Inform Host Override to unifi.caehomelab.com (which
+#   resolves to 192.168.30.251; raw IP also works) only WHEN failing over. The
+#   name must live in PUBLIC DNS (Cloudflare, DNS-only), NOT the UDM's DNS —
+#   during a DR event the UDM (and its DNS) is what failed. If caelx003 is ever
+#   replaced, repoint the record + update the nodeSelector. (caelx003 over
+#   caelx002: the latter already runs Loki/Grafana/InfluxDB/OpenWebUI and sits
+#   at ~70% memory requests.)
+#
+# SECRETS
+#   `unifi-secrets[MONGO_ROOT_PASSWORD]` and `[MONGO_PASS]` are created by
+#   scripts/deploy-unifi.sh from Infisical (auto-generated + stored on first
+#   run) — never committed here. Same model as postgres-secrets.
+#
+# Deploy: ./scripts/deploy-unifi.sh   (DR standby — keep OUT of deploy-all.sh)
+# UI:     https://unifi.caehomelab.com:8443   (self-signed cert on first boot;
+#         DNS-only record -> 192.168.30.251. Port 8443 is required: the record
+#         points at the hostNetwork node, NOT the Traefik LB, because device
+#         ports 8080/3478/10001/1900 are not served by Traefik.)
+# Runbook: README.md in this directory
+
+---
+# Creates the least-privilege `unifi` Mongo user on first boot only (empty
+# /data/db). Copied verbatim from the LinuxServer.io image docs; the shell
+# variables are provided by the env on the mongo container below.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unifi-mongo-init
+  namespace: ai
+data:
+  init-mongo.sh: |
+    #!/bin/bash
+
+    if which mongosh > /dev/null 2>&1; then
+      mongo_init_bin='mongosh'
+    else
+      mongo_init_bin='mongo'
+    fi
+    "${mongo_init_bin}" <<EOF
+    use ${MONGO_AUTHSOURCE}
+    db.auth("${MONGO_INITDB_ROOT_USERNAME}", "${MONGO_INITDB_ROOT_PASSWORD}")
+    db.createUser({
+      user: "${MONGO_USER}",
+      pwd: "${MONGO_PASS}",
+      roles: [
+        "clusterMonitor",
+        { db: "${MONGO_DBNAME}", role: "dbOwner" },
+        { db: "${MONGO_DBNAME}_stat", role: "dbOwner" },
+        { db: "${MONGO_DBNAME}_audit", role: "dbOwner" },
+        { db: "${MONGO_DBNAME}_restore", role: "dbOwner" }
+      ]
+    })
+    EOF
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unifi-mongo
+  namespace: ai
+  labels:
+    app: unifi-mongo
+spec:
+  # Headless: the StatefulSet's stable DNS name (unifi-mongo.ai.svc.cluster.local).
+  clusterIP: None
+  selector:
+    app: unifi-mongo
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: unifi-mongo
+  namespace: ai
+  labels:
+    app: unifi-mongo
+spec:
+  serviceName: unifi-mongo
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unifi-mongo
+  template:
+    metadata:
+      labels:
+        app: unifi-mongo
+    spec:
+      # Pin to the control-plane "data layer" node (same rationale as postgres).
+      nodeSelector:
+        kubernetes.io/hostname: util-server
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      # local-path volumes are root-owned; the mongo image runs as uid/gid 999.
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: mongo
+          # 4.4 is the newest branch without an AVX requirement — see the header.
+          image: mongo:4.4@sha256:4be76f674fc4b27859816811b8baa3c51830eb1dbf4ca81a51e26b79edd662ef
+          imagePullPolicy: IfNotPresent
+          env:
+            # Bootstraps the root user + enables auth on first run.
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: root
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: unifi-secrets
+                  key: MONGO_ROOT_PASSWORD
+            # Consumed by the init-mongo.sh script above; must match the values
+            # the controller uses (same secret).
+            - name: MONGO_USER
+              value: unifi
+            - name: MONGO_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: unifi-secrets
+                  key: MONGO_PASS
+            - name: MONGO_DBNAME
+              value: unifi
+            - name: MONGO_AUTHSOURCE
+              value: admin
+          ports:
+            - name: mongo
+              containerPort: 27017
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 5
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init
+          configMap:
+            name: unifi-mongo-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: unifi-config
+  namespace: ai
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# In-cluster access to the controller web UI. Devices use the hostNetwork
+# node IP directly (192.168.30.251:8080); this Service exists so other cluster
+# workloads (or a future Ingress) can reach it by DNS name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: unifi
+  namespace: ai
+  labels:
+    app: unifi
+spec:
+  type: ClusterIP
+  selector:
+    app: unifi
+  ports:
+    - name: web
+      port: 8443
+      targetPort: 8443
+    - name: inform
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unifi
+  namespace: ai
+  labels:
+    app: unifi
+spec:
+  replicas: 1
+  # Recreate: a second controller instance would fight over the /config PVC and
+  # the hostNetwork ports, and two controllers must never share one Mongo DB.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: unifi
+  template:
+    metadata:
+      labels:
+        app: unifi
+    spec:
+      # Node's network namespace: device-facing ports (8080 inform, 3478/udp
+      # STUN, 10001/udp discovery, 1900/udp L2) land on caelx003. The node IP is
+      # the device inform target, so it must stay stable -> pin the node.
+      # unifi.caehomelab.com (DNS-only) resolves here; repoint it if the node moves.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: caelx003
+      containers:
+        - name: unifi
+          image: lscr.io/linuxserver/unifi-network-application:10.6.106-ls147@sha256:5f5e76c95b5bd4becb0cdb1b96ef53a468e75ca0f7a096ca5c24fc30998b382a
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: America/Chicago
+            # --- MongoDB connection (must match unifi-mongo above) ---
+            - name: MONGO_USER
+              value: unifi
+            - name: MONGO_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: unifi-secrets
+                  key: MONGO_PASS
+            # FQDN so it resolves under ClusterFirstWithHostNet.
+            - name: MONGO_HOST
+              value: unifi-mongo.ai.svc.cluster.local
+            - name: MONGO_PORT
+              value: "27017"
+            - name: MONGO_DBNAME
+              value: unifi
+            - name: MONGO_AUTHSOURCE
+              value: admin
+            # Java (openjdk-25) heap bounds, in MiB.
+            - name: MEM_LIMIT
+              value: "1024"
+            - name: MEM_STARTUP
+              value: "1024"
+          ports:
+            # Informational with hostNetwork; these bind on the node.
+            - name: web
+              containerPort: 8443
+            - name: inform
+              containerPort: 8080
+            - name: stun
+              containerPort: 3478
+              protocol: UDP
+            - name: discovery
+              containerPort: 10001
+              protocol: UDP
+            - name: l2-discovery
+              containerPort: 1900
+              protocol: UDP
+            - name: guest-https
+              containerPort: 8843
+            - name: guest-http
+              containerPort: 8880
+            - name: speedtest
+              containerPort: 6789
+            - name: syslog
+              containerPort: 5514
+              protocol: UDP
+          # First boot initialises the DB + Java app, which takes minutes; a
+          # startup probe keeps liveness from killing the pod mid-boot.
+          startupProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: 8443
+            periodSeconds: 15
+          livenessProbe:
+            tcpSocket:
+              port: 8443
+            periodSeconds: 30
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: unifi-config
