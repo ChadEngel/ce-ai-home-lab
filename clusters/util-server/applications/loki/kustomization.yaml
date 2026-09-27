@@ -235,7 +235,7 @@ data:
           listen_address: "0.0.0.0:1514"
           listen_protocol: "udp"
           use_incoming_timestamp: true
-          use_rfc5424_message: true
+          use_rfc5424_message: false
         relabel_configs:
           - source_labels: [__syslog_message_hostname]
             target_label: host
