@@ -98,3 +98,39 @@ sudo tailscale status                    # both nodes online, see each other
 sudo tailscale status --json | jq '.Self.PrimaryRoutes'   # route active here?
 sudo tailscale ping 100.85.106.29        # node-to-node tunnel check
 ```
+## Gotcha: `k3s-killall.sh` wiping the advertised route (fixed 2026-09-27)
+
+`/usr/local/bin/k3s-killall.sh` on `util-server` and `caelx002` had been modified
+to include:
+
+```sh
+# Restart tailscale
+if [ -n "$(command -v tailscale)" ]; then
+    tailscale set --advertise-routes=
+fi
+```
+
+Despite the comment that does **not** restart anything — `tailscale set
+--advertise-routes=` clears this node's advertised routes. Because
+`*.caehomelab.com` resolves to `192.168.30.217` (a LAN IP), running
+`k3s-killall.sh` silently broke **all** remote (tailnet) access to the lab.
+
+The block has been removed (backups at `/usr/local/bin/k3s-killall.sh.bak-20260927`).
+Note k3s rewrites `k3s-killall.sh` on upgrade, so this can come back — the
+repo scripts defend against it:
+
+- `scripts/cluster-stop.sh` re-asserts `--advertise-routes` after running killall
+- `scripts/cluster-recover.sh` re-asserts it on every run
+
+### Symptom / quick check
+
+Remote lab URLs stop resolving/connecting, but ping to `100.x` tailnet IPs works.
+
+```sh
+# On a router node — should print the subnet, not null:
+sudo tailscale debug prefs | grep AdvertiseRoutes
+sudo tailscale status --json | jq '.Self.PrimaryRoutes'
+
+# Fix (idempotent, approved routes stay approved):
+sudo tailscale up --advertise-routes=192.168.30.0/24
+```
