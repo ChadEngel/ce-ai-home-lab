@@ -177,8 +177,9 @@ export SUDO_PASS='...'              # sudo password for cengel on caelx004
 ./infra/syslog-receiver/install-remote.sh
 ```
 
-`install.sh` will refuse to run if `/data/udm-pro` is not on a separate
-mount — so if you got this far, it'll proceed and set up syslog-ng +
+`install.sh` will refuse to run if `/data` is not on a separate filesystem —
+it checks the mount root first, then confirms `/data/udm-pro` resolves to the
+same filesystem. So if you got this far, it'll proceed and set up syslog-ng +
 logrotate + the systemd unit.
 
 ## 9. Point the UDM at the receiver

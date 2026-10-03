@@ -18,10 +18,12 @@
 #
 # Optional env:
 #   LISTEN_ADDR          default 0.0.0.0:1514
-#   DATA_DIR             default /data/udm-pro  (must be a separate mount,
-#                        NOT on the OS volume -- a few GiB at minimum; this
-#                        holds the live spool + 7 days of rotated logs +
-#                        syslog-ng's disk-buffer for Loki outages)
+#   DATA_DIR             default /data/udm-pro  (lives inside DATA_MOUNT)
+#   DATA_MOUNT           default /data         (MUST be a separate filesystem;
+#                        this is what install.sh guards on. Holds the live
+#                        spool + 7 days of rotated logs + syslog-ng's
+#                        disk-buffer for Loki outages. Min 2 GiB, recommend
+#                        8 GiB+.)
 #   RETENTION_DAYS       default 7
 #   ENABLE_TS            default 0  (set to 1 to also install Tailscale)
 #   TS_AUTHKEY           default ""  (required if ENABLE_TS=1, else interactive)
@@ -31,6 +33,10 @@ set -euo pipefail
 LISTEN_ADDR="${LISTEN_ADDR:-0.0.0.0:1514}"
 LISTEN_PORT="${LISTEN_ADDR##*:}"           # 1514
 DATA_DIR="${DATA_DIR:-/data/udm-pro}"      # everything syslog-ng writes lives here
+# The mount root that must be a separate filesystem. DATA_DIR lives inside it.
+# Guarding on the mount root (not DATA_DIR) is what stops a Loki outage from
+# filling the OS volume -- DATA_DIR itself is just a subdirectory of the mount.
+DATA_MOUNT="${DATA_MOUNT:-/data}"
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
 ENABLE_TS="${ENABLE_TS:-0}"
 TS_AUTHKEY="${TS_AUTHKEY:-}"
@@ -40,8 +46,8 @@ THIS_DIR="$(cd "$(dirname "$0")" && pwd)"
 [ -n "${SUDO_PASS:-}" ] || { echo "ERROR: SUDO_PASS env var is required (sudo password for current user)" >&2; exit 1; }
 
 # Reject the old default that would put the spool on the OS volume
-if [ "$DATA_DIR" = "/var/log/udm-pro" ]; then
-    echo "ERROR: DATA_DIR=/var/log/udm-pro is the OS volume. Mount a separate volume at /data first (see README §provisioning)" >&2
+if [ "$DATA_MOUNT" = "/var/log" ] || [ "$DATA_MOUNT" = "/" ]; then
+    echo "ERROR: DATA_MOUNT=$DATA_MOUNT is the OS volume. Mount a separate volume at /data first (see README §provisioning)" >&2
     exit 1
 fi
 
@@ -50,7 +56,8 @@ sudo_as() { sudo -S -p '' -H bash -c "$*" <<<"$SUDO_PASS" 2>/dev/null; }
 
 echo "==> syslog-ng receiver install (Ubuntu)"
 echo "    LISTEN_ADDR    = $LISTEN_ADDR"
-echo "    DATA_DIR       = $DATA_DIR  (must be a separate mount)"
+echo "    DATA_DIR       = $DATA_DIR"
+echo "    DATA_MOUNT     = $DATA_MOUNT  (must be a separate filesystem)"
 echo "    RETENTION_DAYS = $RETENTION_DAYS"
 echo "    LOKI_URL       = $LOKI_URL"
 echo "    ENABLE_TS      = $ENABLE_TS"
@@ -71,18 +78,28 @@ sudo_as "install -m 0644 $THIS_DIR/syslog-ng/udm-loki.conf /etc/syslog-ng/conf.d
 # Substitute LOKI_URL into the deployed config
 sudo_as "sed -i 's|@@LOKI_URL@@|$LOKI_URL|g; s|@@DATA_DIR@@|$DATA_DIR|g' /etc/syslog-ng/conf.d/udm-loki.conf"
 
-# 3. verify /data is a separate mount BEFORE writing anything to it
-echo "==> verifying $DATA_DIR is a separate mount (not on the OS volume)"
-if ! sudo_as "mountpoint -q $DATA_DIR"; then
-    echo "ERROR: $DATA_DIR is not a mountpoint. Mount a separate volume there first (see README §provisioning)" >&2
+# 3. verify the mount root is a separate filesystem BEFORE writing anything to it
+echo "==> verifying $DATA_MOUNT is a separate mount (not on the OS volume)"
+if ! sudo_as "mountpoint -q $DATA_MOUNT"; then
+    echo "ERROR: $DATA_MOUNT is not a mountpoint. Mount a separate volume there first (see README §provisioning)" >&2
     echo "       Suggested: 8 GiB minimum. The spool grows during Loki outages (disk-buffer) and holds 7 days of rotated logs." >&2
     exit 1
 fi
-DATA_FREE_KB="$(sudo_as "df -Pk $DATA_DIR | awk 'NR==2{print \$4}'")"
-if [ "${DATA_FREE_KB:-0}" -lt 2097152 ]; then  # 2 GiB
-    echo "WARNING: $DATA_DIR has only ${DATA_FREE_KB} KiB free. Recommend >= 2 GiB (8 GiB+ to absorb Loki outages)." >&2
+# DATA_DIR must be on the same filesystem as DATA_MOUNT (i.e. not a stray dir
+# on the OS volume that happens to sit at the same path).
+DATA_FS="$(sudo_as "stat -c %d $DATA_MOUNT")"
+if [ -d "$DATA_DIR" ]; then
+    DIR_FS="$(sudo_as "stat -c %d $DATA_DIR")"
+    if [ "$DATA_FS" != "$DIR_FS" ]; then
+        echo "ERROR: $DATA_DIR is on a DIFFERENT filesystem than $DATA_MOUNT -- refusing to write" >&2
+        exit 1
+    fi
 fi
-echo "    ok ($(( DATA_FREE_KB / 1024 / 1024 )) GiB free)"
+DATA_FREE_KB="$(sudo_as "df -Pk $DATA_MOUNT | awk 'NR==2{print \$4}'")"
+if [ "${DATA_FREE_KB:-0}" -lt 2097152 ]; then  # 2 GiB
+    echo "WARNING: $DATA_MOUNT has only ${DATA_FREE_KB} KiB free. Recommend >= 2 GiB (8 GiB+ to absorb Loki outages)." >&2
+fi
+echo "    ok ($(( DATA_FREE_KB / 1024 / 1024 )) GiB free on $DATA_MOUNT)"
 
 # 4. spool dir + logrotate
 echo "==> creating spool dir + logrotate"

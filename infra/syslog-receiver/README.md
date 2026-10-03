@@ -113,8 +113,9 @@ export SUDO_PASS='...'                     # sudo password for the remote user
 
 The installer is idempotent — safe to re-run. It scps the directory to the
 host and runs `install.sh` over SSH. `install.sh` will REFUSE to run if
-`/data/udm-pro` is not a separate mountpoint (so the volume really does need
-to exist first).
+`/data` (`DATA_MOUNT`) is not a separate filesystem, or if `/data/udm-pro`
+(`DATA_DIR`) resolves onto a different filesystem than `/data` — so the
+volume really does need to exist and be mounted first.
 
 ## Post-install
 

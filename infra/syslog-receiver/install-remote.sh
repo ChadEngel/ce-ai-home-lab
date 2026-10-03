@@ -15,7 +15,8 @@
 #
 # Optional env:
 #   LISTEN_ADDR       default 0.0.0.0:1514
-#   DATA_DIR          default /data/udm-pro  (must be a separate mount, see README)
+#   DATA_DIR          default /data/udm-pro  (lives inside DATA_MOUNT)
+#   DATA_MOUNT        default /data           (must be a separate filesystem, see README)
 #   RETENTION_DAYS    default 7
 #   ENABLE_TS         default 0
 #   TS_AUTHKEY        default ""
@@ -82,6 +83,7 @@ export SUDO_PASS='$(printf '%s' "$SUDO_PASS")'
 export LOKI_URL='$LOKI_URL'
 export LISTEN_ADDR='${LISTEN_ADDR:-0.0.0.0:1514}'
 export DATA_DIR='${DATA_DIR:-/data/udm-pro}'
+export DATA_MOUNT='${DATA_MOUNT:-/data}'
 export RETENTION_DAYS='${RETENTION_DAYS:-7}'
 export ENABLE_TS='${ENABLE_TS:-0}'
 export TS_AUTHKEY='${TS_AUTHKEY:-}'
