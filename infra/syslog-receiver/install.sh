@@ -5,12 +5,13 @@
 #
 # What it does:
 #   1. apt update + install syslog-ng, syslog-ng-mod-http, logrotate, jq, curl
-#   2. Drop syslog-ng config into /etc/syslog-ng/conf.d/udm-loki.conf
-#   3. Substitute @@LOKI_URL@@ and @@DATA_DIR@@
-#   4. Validate config with syslog-ng --syntax-only
-#   5. Enable + restart syslog-ng
-#   6. (Optional) install + start Tailscale, advertise as subnet router if asked
-#   7. Print sanity checks
+#   2. Set the host timezone (RFC 3164 timestamps are parsed against local TZ)
+#   3. Drop syslog-ng config into /etc/syslog-ng/conf.d/udm-loki.conf
+#   4. Substitute @@LOKI_URL@@ and @@DATA_DIR@@
+#   5. Validate config with syslog-ng --syntax-only
+#   6. Enable + restart syslog-ng
+#   7. (Optional) install + start Tailscale, advertise as subnet router if asked
+#   8. Print sanity checks
 #
 # Required env / args:
 #   LOKI_URL  -- e.g. http://192.168.30.217:3100
@@ -25,6 +26,10 @@
 #                        disk-buffer for Loki outages. Min 2 GiB, recommend
 #                        8 GiB+.)
 #   RETENTION_DAYS       default 7
+#   TIMEZONE             default America/Chicago. The UDM sends RFC 3164
+#                        timestamps in local wall-clock with no offset, and
+#                        syslog-ng parses them against the HOST timezone. A
+#                        wrong host TZ silently shifts every event by hours.
 #   ENABLE_TS            default 0  (set to 1 to also install Tailscale)
 #   TS_AUTHKEY           default ""  (required if ENABLE_TS=1, else interactive)
 
@@ -38,6 +43,7 @@ DATA_DIR="${DATA_DIR:-/data/udm-pro}"      # everything syslog-ng writes lives h
 # filling the OS volume -- DATA_DIR itself is just a subdirectory of the mount.
 DATA_MOUNT="${DATA_MOUNT:-/data}"
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
+TIMEZONE="${TIMEZONE:-America/Chicago}"
 ENABLE_TS="${ENABLE_TS:-0}"
 TS_AUTHKEY="${TS_AUTHKEY:-}"
 THIS_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -59,6 +65,7 @@ echo "    LISTEN_ADDR    = $LISTEN_ADDR"
 echo "    DATA_DIR       = $DATA_DIR"
 echo "    DATA_MOUNT     = $DATA_MOUNT  (must be a separate filesystem)"
 echo "    RETENTION_DAYS = $RETENTION_DAYS"
+echo "    TIMEZONE       = $TIMEZONE  (RFC 3164 parsing uses host local time)"
 echo "    LOKI_URL       = $LOKI_URL"
 echo "    ENABLE_TS      = $ENABLE_TS"
 echo "    user           = $(whoami)"
@@ -70,6 +77,18 @@ export DEBIAN_FRONTEND=noninteractive
 sudo_as "apt-get update -y"
 # syslog-ng-core + syslog-ng-mod-http + logrotate + jq + curl + ca-certs
 sudo_as "apt-get install -y --no-install-recommends syslog-ng-core syslog-ng-mod-http logrotate jq curl ca-certificates"
+
+# 2b. host timezone -- RFC 3164 timestamps carry no offset and are parsed
+# against the host's local timezone. A UTC host shifts every UDM event by the
+# UTC offset (5-6h here), silently pushing them outside Grafana's window.
+echo "==> setting host timezone to $TIMEZONE"
+if command -v timedatectl >/dev/null; then
+    sudo_as "timedatectl set-timezone $TIMEZONE"
+else
+    sudo_as "ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime"
+    echo "$TIMEZONE" | sudo_as "tee /etc/timezone >/dev/null"
+fi
+sudo_as "timedatectl" | grep -E "Time zone|Local time" || true
 
 # 2. syslog-ng config
 echo "==> writing syslog-ng config"
