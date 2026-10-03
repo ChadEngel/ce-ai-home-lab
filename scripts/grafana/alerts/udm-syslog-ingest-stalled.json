@@ -1,0 +1,68 @@
+{
+  "title": "UDM syslog \u2014 ingest stalled",
+  "ruleGroup": "udm-syslog",
+  "folder": "UDM Alerts",
+  "for": "30m",
+  "noDataState": "OK",
+  "execErrState": "OK",
+  "condition": "C",
+  "labels": {
+    "severity": "critical"
+  },
+  "annotations": {
+    "summary": "No UDM syslog has reached Loki for 30m \u2014 the receiver, the UDM's syslog target, or the network path is broken.",
+    "description": "Fires when the 30m total is < 1. Catches a dead syslog-ng on caelx004 or the UDM dropping the target."
+  },
+  "data": [
+    {
+      "refId": "A",
+      "datasourceUid": "loki",
+      "relativeTimeRange": {
+        "from": 1800,
+        "to": 0
+      },
+      "model": {
+        "refId": "A",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "expr": "sum(count_over_time({job=\"udm-syslog\"} [30m])) or vector(0)",
+        "queryType": "range"
+      }
+    },
+    {
+      "refId": "B",
+      "datasourceUid": "__expr__",
+      "model": {
+        "type": "reduce",
+        "expression": "A",
+        "reducer": "last",
+        "refId": "B"
+      }
+    },
+    {
+      "refId": "C",
+      "datasourceUid": "__expr__",
+      "model": {
+        "type": "threshold",
+        "expression": "B",
+        "refId": "C",
+        "conditions": [
+          {
+            "evaluator": {
+              "type": "lt",
+              "params": [
+                1
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "relativeTimeRange": {
+    "from": 1800,
+    "to": 0
+  }
+}
