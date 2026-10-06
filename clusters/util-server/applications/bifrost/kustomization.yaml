@@ -187,6 +187,16 @@ spec:
                 secretKeyRef:
                   name: bifrost-secrets
                   key: BIFROST_API_KEY
+            # Bifrost >= 2.2.6 setup lock: bootstrap token for /api (management
+            # surface). Value lives in Infisical (BIFROST_SETUP_TOKEN, project
+            # caehomelab-v1q6/env prod) synced into bifrost-secrets. Do NOT add
+            # "setup_token" to config.json — resolveSetupToken reads this env
+            # var directly; unset = fail closed (401/403 on non-public /api).
+            - name: BIFROST_SETUP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: bifrost-secrets
+                  key: BIFROST_SETUP_TOKEN
           resources:
             requests:
               cpu: 25m
