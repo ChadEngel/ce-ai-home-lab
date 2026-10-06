@@ -15,7 +15,7 @@ dashboards/alerts** — no bespoke MCP code.
 | In-cluster URL | `http://mcp-grafana.ai.svc.cluster.local:8000/mcp` |
 | Grafana auth | service-account token (`GRAFANA_SERVICE_ACCOUNT_TOKEN`) — read-only |
 | Caller auth | none (see *Caller authentication* below) |
-| Consumers | Bifrost MCP client `grafana-noc`; Virtual Key `aios-noc` |
+| Consumers | Bifrost MCP client `grafana_noc`; Virtual Key `aios-noc` |
 | Design | `ce-aios/aios/roadmap/t4-noc-mcp-design.md` |
 | Issues | #30 (T4), #31 (T5), #18 (H2) |
 
@@ -99,7 +99,7 @@ kubectl apply -n ai -f clusters/util-server/applications/mcp-grafana/kustomizati
 ```
 
 Then configure the Bifrost side: the git-tracked `bifrost-config` ConfigMap in
-`../bifrost/kustomization.yaml` declares the MCP client `grafana-noc` and the
+`../bifrost/kustomization.yaml` declares the MCP client `grafana_noc` and the
 Virtual Key `aios-noc` (mounted at `/app/data/config.json`; restart the pod to
 apply).
 
@@ -112,7 +112,7 @@ kubectl -n ai run curl --rm -it --restart=Never --image=curlimages/curl -- \
   http://mcp-grafana.ai.svc.cluster.local:8000/mcp
 
 # After the Bifrost client is registered, confirm the tool list:
-#   GET /api/mcp/clients  ->  client "grafana-noc"
+#   GET /api/mcp/clients  ->  client "grafana_noc"
 ```
 
 End-to-end proof (one LogQL query through Bifrost) is issue **#31 (T5)**.

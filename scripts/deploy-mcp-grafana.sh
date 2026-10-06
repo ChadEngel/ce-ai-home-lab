@@ -1,6 +1,6 @@
 #!/bin/bash
 # Deploy the mcp-grafana MCP server and (re)load the Bifrost config.json that
-# registers the "grafana-noc" MCP client + "aios-noc" Virtual Key.
+# registers the "grafana_noc" MCP client + "aios-noc" Virtual Key.
 # Run from the repository root: ./scripts/deploy-mcp-grafana.sh
 #
 # Brings up:
@@ -8,7 +8,7 @@
 #   - NetworkPolicy limiting ingress to the Bifrost pod
 #   - InfisicalSecret syncing GRAFANA_SERVICE_ACCOUNT_TOKEN -> ai/mcp-grafana-secrets
 #   - Bifrost config.json (bifrost-config ConfigMap) mounted at /app/data/config.json,
-#     declaring the grafana-noc MCP client and the aios-noc Virtual Key
+#     declaring the grafana_noc MCP client and the aios-noc Virtual Key
 #
 # Prerequisite: the Infisical secret GRAFANA_SERVICE_ACCOUNT_TOKEN must exist
 # (a token from a read-only Grafana service account). See the mcp-grafana README.
@@ -81,7 +81,7 @@ echo "=== Verification ==="
 sleep 5
 
 echo ""
-echo "--- MCP clients (expect grafana-noc) ---"
+echo "--- MCP clients (expect grafana_noc) ---"
 kubectl -n ai exec deploy/bifrost -- \
     wget -qO- http://localhost:8080/api/mcp/clients 2>/dev/null \
     | python3 -c "import sys,json;d=json.load(sys.stdin);print('count:',d.get('count'));[print('  -',c.get('name'),'| conn:',c.get('connection_type'),'| state:',c.get('state')) for c in d.get('clients',[])]" \
@@ -98,7 +98,7 @@ kubectl -n ai exec deploy/bifrost -- \
 echo ""
 echo "=== mcp-grafana deployed ==="
 echo "  Internal:  http://mcp-grafana.ai.svc.cluster.local:8000/mcp"
-echo "  Bifrost MCP client:  grafana-noc"
+echo "  Bifrost MCP client:  grafana_noc"
 echo "  Bifrost Virtual Key: aios-noc  (R0: tools_to_auto_execute = [], nothing auto-runs)"
 echo ""
 echo "  Grafana auth: read-only service-account token from Infisical"

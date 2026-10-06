@@ -1,6 +1,6 @@
 # mcp-grafana — Model Context Protocol server exposing Grafana's read-only
 # observability surface (Loki logs, InfluxDB queries, dashboards/alerts) to the
-# Bifrost AI gateway's "grafana-noc" MCP client.
+# Bifrost AI gateway's "grafana_noc" MCP client.
 #
 # Upstream: https://github.com/grafana/mcp-grafana (official Grafana, Go)
 # Design + rationale: ce-aios/aios/roadmap/t4-noc-mcp-design.md (T4)

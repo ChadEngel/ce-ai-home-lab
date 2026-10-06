@@ -64,7 +64,7 @@ spec:
 ---
 # Declarative Bifrost config (git-tracked). Mounted read-only at
 # /app/data/config.json -- the path Bifrost's LoadConfig reads (app-dir
-# /app/data). Declares the grafana-noc MCP client and the aios-noc Virtual
+# /app/data). Declares the grafana_noc MCP client and the aios-noc Virtual
 # Key. Merged with the existing config.db under source_of_truth: split
 # (default), so the ce-key / ce-pi-macbook VKs in the DB are preserved.
 #
@@ -86,7 +86,7 @@ data:
       "mcp": {
         "client_configs": [
           {
-            "name": "grafana-noc",
+            "name": "grafana_noc",
             "connection_type": "http",
             "connection_string": "http://mcp-grafana.ai.svc.cluster.local:8000/mcp",
             "auth_type": "none",
@@ -100,7 +100,7 @@ data:
         "virtual_keys": [
           {
             "name": "aios-noc",
-            "description": "AI NOC agent (R0 read-only). Grant of the grafana-noc MCP client; no tool auto-executes.",
+            "description": "AI NOC agent (R0 read-only). Grant of the grafana_noc MCP client; no tool auto-executes.",
             "is_active": true,
             "allow_all_providers": false,
             "provider_configs": [
@@ -117,7 +117,7 @@ data:
             ],
             "mcp_configs": [
               {
-                "mcp_client_name": "grafana-noc",
+                "mcp_client_name": "grafana_noc",
                 "tools_to_execute": ["*"]
               }
             ]
