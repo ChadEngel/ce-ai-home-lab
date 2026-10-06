@@ -16,10 +16,12 @@
 #   4. openwebui          - Main AI interface (connects to bifrost-api on :8080)
 #   5. searxng            - Search engine
 #   6. grafana            - Monitoring dashboard (needs influxdb-secrets from Infisical)
+#   6b. mcp-grafana       - Read-only Grafana/Loki/InfluxDB MCP server for the Bifrost NOC agent
 #   7. loki               - Log aggregation (Loki + Promtail syslog intake for the UDM)
 #   8. headlamp           - Read-only k8s web UI (ServiceAccount token login)
 #
-# Note: MCPo is not deployed (no published Docker images yet)
+# Note: MCPo is not deployed (no published Docker images yet); the Bifrost
+#       tool plane uses mcp-grafana instead.
 # Note: Ollama runs on separate server aiserver.home, not in Kubernetes
 #
 # One-time prerequisites BEFORE first run (see clusters/util-server/applications/infisical-operator/README.md):
@@ -73,6 +75,12 @@ echo ""
 echo ">>> Step 6: Deploying Grafana..."
 $SCRIPT_DIR/deploy-grafana.sh
 
+# Step 6b: Deploy mcp-grafana (read-only MCP server for the Bifrost NOC agent).
+# After Grafana (it queries Grafana) and before the final Grafana restart.
+echo ""
+echo ">>> Step 6b: Deploying mcp-grafana (read-only MCP server)..."
+$SCRIPT_DIR/deploy-mcp-grafana.sh
+
 # Step 7: Deploy Loki + Promtail (log aggregation; UDM syslog intake)
 echo ""
 echo ">>> Step 7: Deploying Loki + Promtail..."
@@ -100,6 +108,7 @@ echo "  OpenWebUI:   https://ai.caehomelab.com"
 echo "  Bifrost API: https://llm.caehomelab.com  (configure providers via web UI)"
 echo "  Infisical:   https://secrets.caehomelab.com"
 echo "  Grafana:     https://grafana.caehomelab.com"
+echo "  mcp-grafana: http://mcp-grafana.ai.svc.cluster.local:8000/mcp (internal; Bifrost MCP client 'grafana-noc')"
 echo "  Loki:        https://loki.caehomelab.com   (UDM syslog -> 192.168.30.217:30014 UDP, 15-day retention)"
 echo "  Headlamp:    https://headlamp.caehomelab.com   (read-only k8s UI; ServiceAccount token login)"
 echo ""

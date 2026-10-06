@@ -1,0 +1,165 @@
+# mcp-grafana — Model Context Protocol server exposing Grafana's read-only
+# observability surface (Loki logs, InfluxDB queries, dashboards/alerts) to the
+# Bifrost AI gateway's "grafana-noc" MCP client.
+#
+# Upstream: https://github.com/grafana/mcp-grafana (official Grafana, Go)
+# Design + rationale: ce-aios/aios/roadmap/t4-noc-mcp-design.md (T4)
+# Tracking issue: #30 (T4) / #31 (T5 one-tool proof) / #18 (H2)
+#
+# ── Why a separate Deployment (not a stdio child of Bifrost) ────────────────
+# mcp-grafana *does* support stdio, but Bifrost's stdio client exec()s a local
+# binary (core/schemas/mcp.go MCPStdioConfig{Command,Args}); that binary is not
+# in the Bifrost image. Shipping it in-cluster as its own HTTP service gives it
+# a scoped credential + lifecycle and keeps stdio out of the gateway container.
+# Bifrost reaches it over streamable-http on the cluster network.
+#
+# ── Read-only posture (defence in depth) ────────────────────────────────────
+#   Layer 1: this server runs --disable-write (no create/update tools).
+#   Layer 2: the Grafana service-account token is Viewer/read-scoped, so even
+#            the raw query tools cannot mutate anything.
+#   Layer 3: Bifrost's per-agent Virtual Key only grants a tool allow-list.
+# --enable-query re-registers the raw query tools (query_sql, query_influxdb)
+# that --disable-write removes; it is safe ONLY because layer 2 holds. If the
+# Grafana token ever gains write scope, drop --enable-query immediately.
+#
+# ── Credential ──────────────────────────────────────────────────────────────
+# GRAFANA_SERVICE_ACCOUNT_TOKEN comes from Infisical (see infisical-operator/
+# infisical-secrets-sync.yaml -> InfisicalSecret "mcp-grafana-secrets-sync"),
+# synced to K8s Secret "mcp-grafana-secrets" and mounted as a *file*. The file
+# is re-read on every request, so rotating the token needs no pod restart.
+# Never set GRAFANA_SERVICE_ACCOUNT_TOKEN inline: if both the inline value and
+# the _FILE var are set, the inline one wins and rotation stops working.
+#
+# ── Host validation gotcha (read before changing --address / --allowed-hosts)
+# --allowed-hosts defaults to loopback variants of --address. Bound to a pod IP
+# with no explicit allowlist, Bifrost's request (Host = the Service DNS name)
+# and the kubelet probe (Host = the pod IP) are both rejected with 403. We set
+# the Service DNS name explicitly, and use a tcpSocket probe (which carries no
+# Host header) so probes never hit the validator.
+#
+# NB: serving on a non-loopback address with no caller token logs a SECURITY
+# error at startup (and upstream will make it fatal in a future release). We
+# compensate with a NetworkPolicy limiting ingress to the Bifrost pod; enabling
+# `--server-auth-token` (Q-T4-5) is the upstream-blessed fix and is tracked as
+# follow-up hardening.
+#
+# Apply: kubectl apply -n ai -f kustomization.yaml
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-grafana
+  namespace: ai
+  labels:
+    app: mcp-grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-grafana
+  template:
+    metadata:
+      labels:
+        app: mcp-grafana
+    spec:
+      containers:
+        - name: mcp-grafana
+          image: grafana/mcp-grafana:2.0.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-t"
+            - "streamable-http"
+            - "--address"
+            - ":8000"
+            - "--endpoint-path"
+            - "/mcp"
+            # --enabled-tools REPLACES the upstream default set entirely, so
+            # every tool we want must be named here. influxdb is NOT in the
+            # default list and must be added explicitly.
+            - "--enabled-tools=search,datasource,loki,influxdb,alerting,dashboard"
+            - "--disable-write"
+            - "--enable-query"
+            # Explicit Host allowlist (see the gotcha note above).
+            - "--allowed-hosts=mcp-grafana.ai.svc.cluster.local:8000,mcp-grafana.ai.svc:8000"
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: GRAFANA_URL
+              value: "http://grafana.ai.svc.cluster.local:3000"
+            # File-based: re-read per request, so rotation needs no restart.
+            - name: GRAFANA_SERVICE_ACCOUNT_TOKEN_FILE
+              value: "/var/run/secrets/grafana/token"
+          # tcpSocket, not httpGet: an httpGet probe sends Host=<podIP>, which
+          # is outside --allowed-hosts and would 403. tcpSocket opens a bare
+          # connection and skips Host validation.
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 5
+          volumeMounts:
+            - name: grafana-token
+              mountPath: /var/run/secrets/grafana
+              readOnly: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: grafana-token
+          secret:
+            secretName: mcp-grafana-secrets
+            items:
+              - key: GRAFANA_SERVICE_ACCOUNT_TOKEN
+                path: token
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-grafana
+  namespace: ai
+spec:
+  type: ClusterIP
+  selector:
+    app: mcp-grafana
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+
+---
+# NetworkPolicy: only the Bifrost pod (and the kubelet, for probes) may reach
+# the MCP server. This is the compensating control for running without a caller
+# bearer token (see Q-T4-5). k3s enforces NetworkPolicy via its built-in
+# kube-router controller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-grafana
+  namespace: ai
+spec:
+  podSelector:
+    matchLabels:
+      app: mcp-grafana
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: bifrost
+      ports:
+        - protocol: TCP
+          port: 8000

@@ -50,6 +50,71 @@ spec:
       storage: 5Gi
 
 ---
+# Declarative Bifrost config (git-tracked). Mounted read-only at
+# /app/data/config.json -- the path Bifrost's LoadConfig reads (app-dir
+# /app/data). Declares the grafana-noc MCP client and the aios-noc Virtual
+# Key. Merged with the existing config.db under source_of_truth: split
+# (default), so the ce-key / ce-pi-macbook VKs in the DB are preserved.
+#
+# Do NOT add `"version": 1` to this file: that restores v1.4 semantics where
+# an empty allow-list means "allow all". Modern (v1.5+) semantics -- empty =
+# deny all -- are what we want, so `version` stays omitted.
+#
+# subPath mount: edits to this ConfigMap do not hot-reload; restart the pod
+# (rollout restart) to apply, which Bifrost requires anyway to re-read config.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bifrost-config
+  namespace: ai
+data:
+  config.json: |
+    {
+      "$schema": "https://www.getbifrost.ai/schema",
+      "mcp": {
+        "client_configs": [
+          {
+            "name": "grafana-noc",
+            "connection_type": "http",
+            "connection_string": "http://mcp-grafana.ai.svc.cluster.local:8000/mcp",
+            "auth_type": "none",
+            "is_ping_available": true,
+            "tools_to_execute": ["*"],
+            "tools_to_auto_execute": []
+          }
+        ]
+      },
+      "governance": {
+        "virtual_keys": [
+          {
+            "name": "aios-noc",
+            "description": "AI NOC agent (R0 read-only). Grant of the grafana-noc MCP client; no tool auto-executes.",
+            "is_active": true,
+            "allow_all_providers": false,
+            "provider_configs": [
+              {
+                "provider": "openrouter",
+                "allowed_models": ["*"],
+                "allow_all_keys": true
+              },
+              {
+                "provider": "ollama",
+                "allowed_models": ["*"],
+                "allow_all_keys": true
+              }
+            ],
+            "mcp_configs": [
+              {
+                "mcp_client_name": "grafana-noc",
+                "tools_to_execute": ["*"]
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -112,10 +177,17 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/data
+            - name: config
+              mountPath: /app/data/config.json
+              subPath: config.json
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: bifrost-pvc
+        - name: config
+          configMap:
+            name: bifrost-config
 
 ---
 apiVersion: networking.k8s.io/v1
