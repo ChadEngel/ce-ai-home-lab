@@ -39,12 +39,24 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: bifrost-pvc
+  name: bifrost-pvc-local
   namespace: ai
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-client
+  # local-path (WaitForFirstConsumer) instead of nfs-client:
+  # SQLite-on-NFS produced lock/fsync stalls that timed out /health and,
+  # with failureThreshold=5/timeoutSeconds=1s, risked restarting the
+  # container during sustained stalls. The manifest's own README documents
+  # this. Migration from the old NFS PVC was done by the bifrost-pvc-migrate
+  # Job; data lives in /app/data on a node-local volume now.
+  #
+  # CAVEAT: local-path SC is Delete-reclaim and node-bound. If the node
+  # hosting this PVC dies, the volume AND its data are gone. For a single-
+  # replica SQLite service in a home lab, this is acceptable; for anything
+  # requiring durability, add a node affinity pin to the node with regular
+  # backups of /var/lib/rancher/k3s/storage/<pvc-uid>/.
+  storageClassName: local-path
   resources:
     requests:
       storage: 5Gi
@@ -144,19 +156,27 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          # Probes tuned for an SQLite-backed service: /health does fsync
+          # against the local-path PVC. timeoutSeconds=1s was too tight and
+          # produced 200+ readiness/50+ liveness "deadline exceeded" warnings
+          # over 25h, with liveness on the edge of triggering real restarts.
           readinessProbe:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 15
+            initialDelaySeconds: 45
             periodSeconds: 20
-            failureThreshold: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
+            successThreshold: 1
           env:
             - name: PORT
               value: "8080"
@@ -184,7 +204,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: bifrost-pvc
+            claimName: bifrost-pvc-local
         - name: config
           configMap:
             name: bifrost-config
