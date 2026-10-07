@@ -74,6 +74,22 @@ spec:
 #
 # subPath mount: edits to this ConfigMap do not hot-reload; restart the pod
 # (rollout restart) to apply, which Bifrost requires anyway to re-read config.
+#
+# Caller auth (2026-10-06): client_config.enforce_auth_on_inference was enabled
+# via PUT /api/config (setup-token-authed), persisting in config.db. It closes
+# the unauthenticated /mcp/* bypass and requires a Virtual Key/API key on /v1.
+# Verified live: unauthed /mcp -> 401; aios-noc VK -> 200 (20 tools, MCP-scoped);
+# ce-key -> 200 /v1 (Open WebUI), 403 /mcp (no MCP scope); unauthed /v1 -> 401.
+# The flag survives restarts as long as this config.json has no "client"
+# section: source_of_truth=split only force-syncs sections present in the file,
+# so introducing a "client" key here WITHOUT enforce_auth_on_inference=true
+# would revert the DB to enforcement-off on the next boot. Keep it out, or set
+# it explicitly.
+#
+# Image pin (2026-10-06): tag+digest of v2.2.6 (tag's list digest matches the
+# previously running imageID). Never return to :latest+Always -- that silently
+# floated v2.2.3 -> v2.2.6. Bump via tag AND digest after checking release
+# notes (v2.2.6 added the /api setup lock we unlocked), then IfNotPresent.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -151,8 +167,8 @@ spec:
         - name: bifrost
           # Track upstream releases: `latest` + Always pull.
           # Pod restarts (or rollout restart) pick up the newest build.
-          image: maximhq/bifrost:latest
-          imagePullPolicy: Always
+          image: maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               name: http
