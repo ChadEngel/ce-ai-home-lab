@@ -71,6 +71,7 @@ same Traefik IP, so internal and external clients get the same answer.
 | `search.caehomelab.com`  | SearXNG |
 | `secrets.caehomelab.com` | Infisical |
 | `grafana.caehomelab.com` | Grafana |
+| `headlamp.caehomelab.com` | Headlamp (read-only k8s UI) |
 
 ## Repository structure
 
@@ -95,6 +96,7 @@ same Traefik IP, so internal and external clients get the same answer.
 │           ├── infisical/      (+ infisical-operator/)
 │           ├── searxng/
 │           ├── grafana/
+│           ├── headlamp/       (read-only k8s web UI)
 │           ├── ollama/         (README only — runs on external host)
 │           └── mcpo/           (README only — image not published)
 └── scripts/                    (deploy, verify, host-integration helpers; see scripts/README.md)
@@ -237,6 +239,7 @@ Placeholders in the repo are marked `REPLACE_WITH_*`, `*-change-me`, or
 | SearXNG    | Deployment + Ingress | 8080 | `search.caehomelab.com` |
 | Infisical  | Deployment + Ingress | 3000 | `secrets.caehomelab.com` |
 | Grafana    | Deployment + Ingress | 3000 | `grafana.caehomelab.com` |
+| Headlamp   | Deployment + Ingress | 4466 | `headlamp.caehomelab.com` |
 | Ollama     | external host        | 11434 | (no public URL) |
 
 ## Monitoring

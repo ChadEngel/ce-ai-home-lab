@@ -20,6 +20,7 @@ happened.
 | Infisical  | `https://secrets.caehomelab.com` | ✅ Running | Hosts the operator's `secret-management`/`prod` project (CLOUDFLARE_API_TOKEN, INFLUXDB_TOKEN, etc.) |
 | Grafana    | `https://grafana.caehomelab.com` | ✅ Running (2 replicas) | Datasource connected to InfluxDB v2 in-cluster at `http://influxdb.ai.svc.cluster.local:8086` (org `home`, bucket `kube_metrics`); 7 dashboards + 7 alert rules loaded; Postgres-backed with shared Redis dedup |
 | Loki       | `https://loki.caehomelab.com` | ✅ Running | Log aggregation (Loki 3.7.4 single-binary, filesystem-on-NFS, 15-day retention); Promtail ingests UDM syslog via UDP NodePort `192.168.30.217:30014`; added as a Grafana datasource (uid `loki`) |
+| Headlamp   | `https://headlamp.caehomelab.com` | ✅ Running | Read-only Kubernetes web UI (v0.45.0, digest-pinned). Auth = Headlamp's own ServiceAccount token prompt (`kubectl create token headlamp -n ai --duration=720h`); no ingress password. RBAC = `view` + `headlamp-cluster-read`; **secrets deliberately excluded**. Troubleshooting UI only — stores no metrics and sends no alerts |
 | InfluxDB v2 | (LAN-only) `https://influxdb.caehomelab.com` | ✅ Running | In-cluster (org `home`, buckets `kube_metrics` / `network_metrics` / `host_metrics`); data migrated from `aiserver.home` 2026-07-28 (see `docs/migrate-influxdb-to-k8s.md` for the runbook) |
 | Postgres   | (internal only) | ✅ Running | `postgres-0` StatefulSet pinned to `util-server` on `local-path`; backs Grafana + Open WebUI to enable multi-replica; daily logical backups via `postgres-backup` CronJob (last 3 runs Completed) |
 | Redis      | (internal only) | ✅ Running | Ephemeral `--save "" --appendonly no`; backs Grafana unified alerting (`ha_redis_address`) + Open WebUI websocket sticky session; deliberately separate from `infisical-redis` |
@@ -38,6 +39,7 @@ All certificates are issued by Let's Encrypt via the Cloudflare DNS-01 solver:
 | `loki-tls`           | `loki.caehomelab.com`   | ✅ Ready |
 | `infisical-ssl-certs` | `secrets.caehomelab.com` | ✅ Ready |
 | `grafana-tls`         | `grafana.caehomelab.com` | ✅ Ready |
+| `headlamp-tls`        | `headlamp.caehomelab.com` | ✅ Ready |
 | `influxdb-tls`        | `influxdb.caehomelab.com` | ✅ Ready |
 
 ## Recreate + digest-pinning pass (pre-2026-09)

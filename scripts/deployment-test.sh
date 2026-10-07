@@ -235,6 +235,7 @@ check_service_available "bifrost-api"
 check_service_available "infisical"
 check_service_available "infisical-db"
 check_service_available "grafana" 2>/dev/null || warn "grafana service" "May not be deployed"
+check_service_available "headlamp" 2>/dev/null || warn "headlamp service" "May not be deployed"
 
 print_section "INGRESSES"
 check_ingress_configured "openwebui-ingress"
@@ -242,6 +243,7 @@ check_ingress_configured "searxng-ingress"
 check_ingress_configured "bifrost-ingress"
 check_ingress_configured "infisical-ingress" 2>/dev/null || warn "infisical-ingress" "May not be deployed"
 check_ingress_configured "grafana-ingress" 2>/dev/null || warn "grafana-ingress" "May not be deployed"
+check_ingress_configured "headlamp-ingress" 2>/dev/null || warn "headlamp-ingress" "May not be deployed"
 
 print_section "CERTIFICATES"
 check_certificate "openwebui-tls"
@@ -249,6 +251,7 @@ check_certificate "searxng-tls"
 check_certificate "bifrost-tls"
 check_certificate "infisical-ssl-certs" 2>/dev/null || warn "infisical-ssl-certs" "May not be issued yet"
 check_certificate "grafana-tls" 2>/dev/null || warn "grafana-tls" "May not be issued yet"
+check_certificate "headlamp-tls" 2>/dev/null || warn "headlamp-tls" "May not be issued yet"
 
 print_section "SECRETS & CONFIGMAPS"
 check_secret_exists "bifrost-secrets"
@@ -257,6 +260,22 @@ check_secret_exists "infisical-db-creds"
 check_secret_exists "grafana-secrets" 2>/dev/null || warn "grafana-secrets" "May not be deployed"
 check_secret_exists "influxdb-secrets" 2>/dev/null || warn "influxdb-secrets" "May not be deployed"
 check_configmap "searxng-settings"
+
+# Headlamp: auth is its own ServiceAccount token prompt, so there is no
+# ingress secret to check. What matters is that the token is actually REQUIRED
+# (i.e. nobody re-enabled -unsafe-use-service-account-token, which would serve
+# every visitor as the pod SA with no login at all).
+if kubectl get deployment headlamp -n "$NAMESPACE" >/dev/null 2>&1; then
+    if kubectl get deployment headlamp -n "$NAMESPACE" \
+            -o jsonpath='{.spec.template.spec.containers[*].args}' 2>/dev/null \
+            | grep -q -- "-unsafe-use-service-account-token"; then
+        fail "headlamp-auth" "-unsafe-use-service-account-token is set: the UI is served as the pod SA with NO login"
+    else
+        pass "headlamp token auth enabled (no unsafe SA-token bypass)"
+    fi
+else
+    warn "headlamp" "not deployed; skipping auth check"
+fi
 
 print_section "INTERNAL ENDPOINTS (Bifrost & friends)"
 # Probe via cluster DNS. We use a one-off busybox pod to execute the probe
@@ -269,6 +288,7 @@ INTERNAL_URLS=(
     "http://searxng-api.${NAMESPACE}.svc.cluster.local:8080/"
     "http://infisical.${NAMESPACE}.svc.cluster.local:8080/api/status"
     "http://grafana.${NAMESPACE}.svc.cluster.local:3000/api/health"
+    "http://headlamp.${NAMESPACE}.svc.cluster.local:80/"
 )
 # Build a probe script that runs all curl checks, one per line
 PROBE_SCRIPT=""

@@ -39,15 +39,108 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: bifrost-pvc
+  name: bifrost-pvc-local
   namespace: ai
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-client
+  # local-path (WaitForFirstConsumer) instead of nfs-client:
+  # SQLite-on-NFS produced lock/fsync stalls that timed out /health and,
+  # with failureThreshold=5/timeoutSeconds=1s, risked restarting the
+  # container during sustained stalls. The manifest's own README documents
+  # this. Migration from the old NFS PVC was done by the bifrost-pvc-migrate
+  # Job; data lives in /app/data on a node-local volume now.
+  #
+  # CAVEAT: local-path SC is Delete-reclaim and node-bound. If the node
+  # hosting this PVC dies, the volume AND its data are gone. For a single-
+  # replica SQLite service in a home lab, this is acceptable; for anything
+  # requiring durability, add a node affinity pin to the node with regular
+  # backups of /var/lib/rancher/k3s/storage/<pvc-uid>/.
+  storageClassName: local-path
   resources:
     requests:
       storage: 5Gi
+
+---
+# Declarative Bifrost config (git-tracked). Mounted read-only at
+# /app/data/config.json -- the path Bifrost's LoadConfig reads (app-dir
+# /app/data). Declares the grafana_noc MCP client and the aios-noc Virtual
+# Key. Merged with the existing config.db under source_of_truth: split
+# (default), so the ce-key / ce-pi-macbook VKs in the DB are preserved.
+#
+# Do NOT add `"version": 1` to this file: that restores v1.4 semantics where
+# an empty allow-list means "allow all". Modern (v1.5+) semantics -- empty =
+# deny all -- are what we want, so `version` stays omitted.
+#
+# subPath mount: edits to this ConfigMap do not hot-reload; restart the pod
+# (rollout restart) to apply, which Bifrost requires anyway to re-read config.
+#
+# Caller auth (2026-10-06): client_config.enforce_auth_on_inference was enabled
+# via PUT /api/config (setup-token-authed), persisting in config.db. It closes
+# the unauthenticated /mcp/* bypass and requires a Virtual Key/API key on /v1.
+# Verified live: unauthed /mcp -> 401; aios-noc VK -> 200 (20 tools, MCP-scoped);
+# ce-key -> 200 /v1 (Open WebUI), 403 /mcp (no MCP scope); unauthed /v1 -> 401.
+# The flag survives restarts as long as this config.json has no "client"
+# section: source_of_truth=split only force-syncs sections present in the file,
+# so introducing a "client" key here WITHOUT enforce_auth_on_inference=true
+# would revert the DB to enforcement-off on the next boot. Keep it out, or set
+# it explicitly.
+#
+# Image pin (2026-10-06): tag+digest of v2.2.6 (tag's list digest matches the
+# previously running imageID). Never return to :latest+Always -- that silently
+# floated v2.2.3 -> v2.2.6. Bump via tag AND digest after checking release
+# notes (v2.2.6 added the /api setup lock we unlocked), then IfNotPresent.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bifrost-config
+  namespace: ai
+data:
+  config.json: |
+    {
+      "$schema": "https://www.getbifrost.ai/schema",
+      "mcp": {
+        "client_configs": [
+          {
+            "name": "grafana_noc",
+            "connection_type": "http",
+            "connection_string": "http://mcp-grafana.ai.svc.cluster.local:8000/mcp",
+            "auth_type": "none",
+            "is_ping_available": true,
+            "tools_to_execute": ["*"],
+            "tools_to_auto_execute": []
+          }
+        ]
+      },
+      "governance": {
+        "virtual_keys": [
+          {
+            "name": "aios-noc",
+            "description": "AI NOC agent (R0 read-only). Grant of the grafana_noc MCP client; no tool auto-executes.",
+            "is_active": true,
+            "allow_all_providers": false,
+            "provider_configs": [
+              {
+                "provider": "openrouter",
+                "allowed_models": ["*"],
+                "allow_all_keys": true
+              },
+              {
+                "provider": "ollama",
+                "allowed_models": ["*"],
+                "allow_all_keys": true
+              }
+            ],
+            "mcp_configs": [
+              {
+                "mcp_client_name": "grafana_noc",
+                "tools_to_execute": ["*"]
+              }
+            ]
+          }
+        ]
+      }
+    }
 
 ---
 apiVersion: apps/v1
@@ -74,24 +167,32 @@ spec:
         - name: bifrost
           # Track upstream releases: `latest` + Always pull.
           # Pod restarts (or rollout restart) pick up the newest build.
-          image: maximhq/bifrost:latest
-          imagePullPolicy: Always
+          image: maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               name: http
+          # Probes tuned for an SQLite-backed service: /health does fsync
+          # against the local-path PVC. timeoutSeconds=1s was too tight and
+          # produced 200+ readiness/50+ liveness "deadline exceeded" warnings
+          # over 25h, with liveness on the edge of triggering real restarts.
           readinessProbe:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 15
+            initialDelaySeconds: 45
             periodSeconds: 20
-            failureThreshold: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
+            successThreshold: 1
           env:
             - name: PORT
               value: "8080"
@@ -102,6 +203,16 @@ spec:
                 secretKeyRef:
                   name: bifrost-secrets
                   key: BIFROST_API_KEY
+            # Bifrost >= 2.2.6 setup lock: bootstrap token for /api (management
+            # surface). Value lives in Infisical (BIFROST_SETUP_TOKEN, project
+            # caehomelab-v1q6/env prod) synced into bifrost-secrets. Do NOT add
+            # "setup_token" to config.json — resolveSetupToken reads this env
+            # var directly; unset = fail closed (401/403 on non-public /api).
+            - name: BIFROST_SETUP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: bifrost-secrets
+                  key: BIFROST_SETUP_TOKEN
           resources:
             requests:
               cpu: 25m
@@ -112,10 +223,17 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/data
+            - name: config
+              mountPath: /app/data/config.json
+              subPath: config.json
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: bifrost-pvc
+            claimName: bifrost-pvc-local
+        - name: config
+          configMap:
+            name: bifrost-config
 
 ---
 apiVersion: networking.k8s.io/v1
