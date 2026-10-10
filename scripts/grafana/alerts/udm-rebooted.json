@@ -1,6 +1,6 @@
 {
   "title": "UDM rebooted",
-  "ruleGroup": "udm-thermal",
+  "ruleGroup": "udm",
   "folder": "UDM Alerts",
   "for": "0s",
   "noDataState": "OK",
@@ -10,17 +10,23 @@
     "severity": "info"
   },
   "annotations": {
-    "summary": "UDM uptime reset to under 5 minutes — it has just rebooted. Check UDM Uptime, SoC temp and memory on the dashboard to see why."
+    "summary": "UDM uptime reset to under 5 minutes \u2014 it has just rebooted. Check UDM Uptime, SoC temp and memory on the dashboard to see why."
   },
   "data": [
     {
       "refId": "A",
       "datasourceUid": "dfdkew37wk1dse",
-      "relativeTimeRange": { "from": 600, "to": 0 },
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
       "model": {
         "refId": "A",
-        "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
-        "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"uptime_s\")\n  |> aggregateWindow(every: 1m, fn: last, createEmpty: false)"
+        "datasource": {
+          "type": "influxdb",
+          "uid": "dfdkew37wk1dse"
+        },
+        "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg\" and r._field == \"uptime\" and r.mac == \"74:fa:29:54:00:f1\")\n  |> aggregateWindow(every: 1m, fn: last, createEmpty: false)"
       }
     },
     {
@@ -39,7 +45,16 @@
       "model": {
         "type": "threshold",
         "expression": "B",
-        "conditions": [{ "evaluator": { "type": "lt", "params": [300] } }],
+        "conditions": [
+          {
+            "evaluator": {
+              "type": "lt",
+              "params": [
+                300
+              ]
+            }
+          }
+        ],
         "refId": "C"
       }
     }

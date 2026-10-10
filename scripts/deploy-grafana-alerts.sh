@@ -26,12 +26,15 @@ GF_PASS="$(kubectl get secret grafana-secrets -n "$NAMESPACE" -o jsonpath='{.dat
 GRAFANA="http://grafana:3000"
 AUTH="$GF_USER:$GF_PASS"
 
-# HTTP is issued by kubectl exec into a curl-capable pod (the udm-thermal pod
-# carries curl; Grafana is reachable as http://grafana:3000 over the cluster
-# network). Requires kubectl access to the 'ai' namespace.
-CURL_POD="$(kubectl get pod -n "$NAMESPACE" -l app=udm-thermal --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
+# HTTP is issued by kubectl exec into a curl-capable pod (we use the
+# influxdb pod, which always has curl; Grafana is reachable as
+# http://grafana:3000 over the cluster network). Requires kubectl
+# access to the 'ai' namespace. (Previously this used the udm-thermal
+# pod as a curl carrier; that deployment was removed on 2026-10-09
+# because the underlying SSH collector was destabilizing the UDM.)
+CURL_POD="$(kubectl get pod -n "$NAMESPACE" -l app=influxdb --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
 if [ -z "$CURL_POD" ]; then
-  echo "[✗] no curl pod found (app=udm-thermal). Is udm-thermal deployed?" >&2
+  echo "[✗] no curl pod found (app=influxdb). Is influxdb deployed?" >&2
   exit 1
 fi
 

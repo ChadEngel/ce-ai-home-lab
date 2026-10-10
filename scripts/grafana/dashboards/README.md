@@ -92,23 +92,21 @@ at `/var/lib/grafana/dashboards/default`.
     (`usg_networks.num_sta`).
   - **UDM CPU & Memory**, **UDM Temperature** (°C), **Internet Speedtest**
     (download/upload, Mbps → bps), **Load Average & Uplink Latency** — all
-    from the `usg` measurement. The **UDM Temperature** panel graphs BOTH the
-    unpoller board temps (`usg` `temp_cpu`/`temp_phy`/`temp_local`, from the
-    UniFi controller API) AND the **SoC / `thermal_zone0`** line
-    (`udm_thermal` `soc_temp_c`), which unpoller can't see — it's read over
-    SSH sysfs by the `udm-thermal` collector
-    (`clusters/util-server/applications/udm-thermal/`). The SoC is the reading
-    that actually spikes under CPU load (observe ~65–75 °C during fan tests).
-  - **UDM Fan Speed** — a companion panel under the Gateway row graphing the
-    `udm_thermal` `fan1_rpm`/`fan2_rpm` (adt7475 hwmon) that the same
-    `udm-thermal` collector reads over SSH. Fan2 is the exhaust fan that
-    tracks SoC load; Fan1 is often idle (0 RPM) on the UDM Pro. The **UDM CPU &
-    Memory** panel also plots `udm_thermal.mem_used_pct`, and **UDM Load
-    Average** plots `udm_thermal.load1`, so temp/memory/load line up.
-  - **UDM Health & Reboots** row — **UDM Uptime / Reboots** (`udm_thermal.
-    uptime_s`; a sawtooth reset = reboot) and **UDM Reachability**
-    (`udm_thermal.up`; 1 reachable / 0 unreachable). These make every shutdown
-    visible and are the panels to read when the offline/reboot alerts fire.
+    from the `usg` measurement (written by unpoller, which polls the UniFi
+    controller API every ~3 min). The **UDM Temperature** panel graphs
+    `usg.temp_cpu`/`temp_phy`/`temp_local` (board temps from the controller
+    API). These are the readings that track CPU load (observe ~48–55 °C under
+    normal use, ~65–75 °C under heavy DPI/IDS load). Prior to 2026-10-09 a
+    separate `udm-thermal` SSH collector also wrote the SoC
+    `thermal_zone0` reading and fan RPM, but the SSH itself was destabilizing
+    the UDM controller (see `ce-ai-lab/runbooks/udm-thermal-collector-loop.md`)
+    so the collector was removed. The UDM-Pro has a single physical fan and
+    the `has_fan` field on the device API is `False`, so fan RPM is not
+    exposed via the controller API.
+  - **UDM Health & Reboots** row — **UDM Uptime / Reboots** (`usg.uptime`;
+    a sawtooth reset = reboot) and **UDM Reachability** (`usg.state`; 1
+    connected / 0 disconnected). These make every shutdown visible and are
+    the panels to read when the offline/reboot alerts fire.
   - **AP Bandwidth** (`uap` rx/tx derivative) + **AP Client Count**
     (`uap.num_sta`) per access point (Basement, Garage, Upstairs).
   - **Wi-Fi Channel Utilization (%)** — `uap_radios.cu_total` per radio/band.
@@ -161,7 +159,7 @@ at `/var/lib/grafana/dashboards/default`.
 - **`infra-availability.json`** — `CE AI Lab — Infrastructure Availability`
   A red/yellow/green board answering "is everything usable right now?". Backed
   by the `service_health` measurement (`kube_metrics`, written by the
-  `synthetic-monitor` probe) plus `udm_thermal.up` (`network_metrics`).
+  `synthetic-monitor` probe) plus `usg.state` (`network_metrics`).
 
   Panels:
   - **Infrastructure Status** — the traffic light: one tile per service

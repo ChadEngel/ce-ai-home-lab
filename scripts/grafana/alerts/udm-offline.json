@@ -1,8 +1,8 @@
 {
   "title": "UDM offline (unreachable)",
-  "ruleGroup": "udm-thermal",
+  "ruleGroup": "udm",
   "folder": "UDM Alerts",
-  "for": "2m",
+  "for": "5m",
   "noDataState": "OK",
   "execErrState": "OK",
   "condition": "C",
@@ -10,17 +10,23 @@
     "severity": "critical"
   },
   "annotations": {
-    "summary": "The udm-thermal collector could not reach the UDM for 2+ minutes (device down or rebooting)."
+    "summary": "The UDM has been in state=0 (disconnected) for 5+ minutes per unpoller. Device is down or rebooting. Check the UDM Uptime panel and the syslog pipeline (caelx004)."
   },
   "data": [
     {
       "refId": "A",
       "datasourceUid": "dfdkew37wk1dse",
-      "relativeTimeRange": { "from": 300, "to": 0 },
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
       "model": {
         "refId": "A",
-        "datasource": { "type": "influxdb", "uid": "dfdkew37wk1dse" },
-        "query": "from(bucket: \"network_metrics\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"up\")\n  |> aggregateWindow(every: 1m, fn: min, createEmpty: false)"
+        "datasource": {
+          "type": "influxdb",
+          "uid": "dfdkew37wk1dse"
+        },
+        "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg\" and r._field == \"state\" and r.mac == \"74:fa:29:54:00:f1\")\n  |> aggregateWindow(every: 1m, fn: min, createEmpty: false)"
       }
     },
     {
@@ -39,8 +45,29 @@
       "model": {
         "type": "threshold",
         "expression": "B",
-        "conditions": [{ "evaluator": { "type": "lt", "params": [1] } }],
-        "refId": "C"
+        "refId": "C",
+        "conditions": [
+          {
+            "type": "query",
+            "evaluator": {
+              "type": "lt",
+              "params": [
+                1
+              ]
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "B"
+              ]
+            },
+            "reducer": {
+              "type": "last"
+            }
+          }
+        ]
       }
     }
   ]

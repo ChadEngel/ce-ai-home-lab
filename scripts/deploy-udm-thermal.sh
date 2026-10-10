@@ -1,6 +1,30 @@
 #!/bin/bash
 # Deploy the udm-thermal collector to the Kubernetes cluster.
 #
+# !! DEPRECATED 2026-10-09 — DO NOT RUN !!
+#
+# The udm-thermal collector SSHed to the UDM Pro every 15s and was the
+# root cause of weeks of UDM controller instability (mcad timeouts, AP
+# disconnects, config-migration loops). The SSH itself is what was
+# breaking the controller — every SSH session creates a systemd
+# user-session for UID 0, which briefly blocks the UDM's self-inform
+# HTTP endpoint. Even at INTERVAL=60, 1 SSH/min caused 16+ mcad
+# failures in 90s and load spikes to 13. There is no safe INTERVAL
+# short enough to give useful thermal data.
+#
+# This collector has been removed. The same temperature/CPU/memory/load
+# data is now sourced from the unpoller `usg` measurement (board temps
+# from the UniFi controller API). See
+# runbooks/udm-thermal-collector-loop.md and
+# scripts/grafana/dashboards/README.md for the migration.
+#
+# This script is kept for reference (in case we ever need to re-deploy
+# for fan-RPM diagnostics on a known-good UDM) but is no longer invoked
+# by deploy-all.sh and the underlying secrets/CRs have been removed.
+#
+# Original docstring follows for historical context.
+#
+# ---
 # udm-thermal SSHes to the UDM Pro (https://192.168.250.1) as root to read the
 # SoC thermal zone (thermal_zone0, type=cpu-thermal) and fan RPM — telemetry
 # unpoller CANNOT collect because the UniFi controller API only exposes board

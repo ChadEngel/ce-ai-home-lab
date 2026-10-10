@@ -1,6 +1,6 @@
 {
   "title": "UDM SoC temperature high",
-  "ruleGroup": "udm-thermal",
+  "ruleGroup": "udm",
   "folder": "UDM Alerts",
   "for": "1m",
   "noDataState": "OK",
@@ -21,7 +21,7 @@
         },
         "intervalMs": 1000,
         "maxDataPoints": 43200,
-        "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"udm_thermal\" and r._field == \"soc_temp_c\")\n  |> aggregateWindow(every: 1m, fn: max, createEmpty: false)",
+        "query": "from(bucket: \"network_metrics\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"usg\" and r._field == \"temp_cpu\" and r.mac == \"74:fa:29:54:00:f1\")\n  |> aggregateWindow(every: 1m, fn: max, createEmpty: false)",
         "refId": "A"
       }
     },
@@ -51,11 +51,23 @@
       "model": {
         "conditions": [
           {
+            "type": "query",
             "evaluator": {
+              "type": "gt",
               "params": [
-                98
-              ],
-              "type": "gte"
+                80
+              ]
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "B"
+              ]
+            },
+            "reducer": {
+              "type": "last"
             }
           }
         ],
@@ -71,6 +83,6 @@
     "severity": "critical"
   },
   "annotations": {
-    "summary": "UDM SoC temperature is >= 98C for 1 minute — close to the 105C critical trip. Fans should be pinned high; if this fires, stop sustained CPU work (e.g. support-file generation) and check airflow/ambient before it thermally shuts down."
+    "summary": "UDM CPU die temperature (usg.temp_cpu) is >80\u00b0C for 1+ minute per unpoller. Approaching thermal envelope. Check UDM Temperature panel and airflow."
   }
 }
