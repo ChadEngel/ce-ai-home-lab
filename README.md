@@ -3,6 +3,11 @@
 Kubernetes infrastructure and applications for the home lab, managed as
 GitOps-friendly manifests on a single-node k3s cluster.
 
+> **AI coding assistants:** read [`AGENTS.md`](./AGENTS.md) first. It
+> contains a hard-won lesson about SSH-based polling of UniFi devices
+> (the `udm-thermal` collector incident) and a checklist to apply before
+> suggesting any new collector, scrape, or active probe.
+
 ## Overview
 
 This repo turns a single Linux box into a self-hosted AI workspace. Once
