@@ -69,6 +69,22 @@ at `/var/lib/grafana/dashboards/default`.
     top-right time range to a representative window (e.g. a busy hour or a
     full day) before sizing. Sorted by CPU peak desc.
 
+- **`mac-host-overview.json`** — `CE AI Lab — Mac Host Overview`
+  macOS host-level metrics (CPU/mem/disk/net/load/temp/processes), backed by
+  the same InfluxDB datasource querying the **`mac_metrics`** bucket with
+  Flux. Data is written by **Telegraf** on each Mac (installed via Homebrew,
+  config in `/opt/homebrew/etc/telegraf.conf` on each box). A `host`
+  multi-select variable (default: All) filters every panel via
+  `r.host =~ /${host:regex}/`. Mirror of `linux-host-overview.json` with
+  Mac-specific regex adjustments:
+  - **NIC regex** `/^en[0-9]+/` (macOS uses `en0`, `en1`, … not `enp*/ens*/eth*`)
+  - **Disk name regex** `/^disk[0-9]+$/` (macOS whole-disk names)
+  - **Disk path filter** excludes `/System/Volumes/*`, `/private/*`, and
+    `/Volumes/Bambu` — these are macOS read-only system volumes and
+    ephemeral temp mounts, not useful for capacity tracking.
+
+  Hosts currently reporting: `mac-aibeast`, `mac-chad-studio`, `mac-mini`.
+
 - **`unifi-network.json`** — `CE AI Lab — UniFi Network (UDM Pro)`
   Network dashboard backed by the InfluxDB v2 datasource (uid `dfdkew37wk1dse`)
   querying the `network_metrics` bucket with **Flux**. Data is written by
