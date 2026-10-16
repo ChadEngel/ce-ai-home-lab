@@ -146,6 +146,30 @@ data:
                 "tools_to_execute": ["*"]
               }
             ]
+          },
+          {
+            "name": "aios-helpdesk",
+            "description": "Helpdesk mail agent (hire #4, R0 read-only). Grant of the graph MCP client (aios-mail-mcp, in-server --read-only); no tool auto-executes. Key value lives in Infisical jarvis-jatg (BIFROST_VK_AIOS_HELPDESK) — deliberately NOT declared here: value-less file declaration preserves the dashboard-issued key per the aios-noc precedent.",
+            "is_active": true,
+            "allow_all_providers": false,
+            "provider_configs": [
+              {
+                "provider": "openrouter",
+                "allowed_models": ["*"],
+                "allow_all_keys": true
+              },
+              {
+                "provider": "ollama",
+                "allowed_models": ["*"],
+                "allow_all_keys": true
+              }
+            ],
+            "mcp_configs": [
+              {
+                "mcp_client_name": "graph",
+                "tools_to_execute": ["*"]
+              }
+            ]
           }
         ]
       }
