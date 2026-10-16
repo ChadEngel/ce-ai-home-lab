@@ -109,6 +109,15 @@ data:
             "is_ping_available": true,
             "tools_to_execute": ["*"],
             "tools_to_auto_execute": []
+          },
+          {
+            "name": "graph",
+            "connection_type": "http",
+            "connection_string": "http://aios-mail-mcp.ai.svc.cluster.local:3000/mcp",
+            "auth_type": "none",
+            "is_ping_available": true,
+            "tools_to_execute": ["*"],
+            "tools_to_auto_execute": []
           }
         ]
       },
