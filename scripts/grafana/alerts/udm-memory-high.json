@@ -2,7 +2,7 @@
   "title": "UDM memory high (OOM risk)",
   "ruleGroup": "udm",
   "folder": "UDM Alerts",
-  "for": "10m",
+  "for": "5m",
   "noDataState": "OK",
   "execErrState": "Error",
   "condition": "C",
@@ -55,7 +55,7 @@
             "evaluator": {
               "type": "gt",
               "params": [
-                88
+                85
               ]
             },
             "operator": {
@@ -83,6 +83,6 @@
     "severity": "warning"
   },
   "annotations": {
-    "summary": "UDM memory (usg.mem) >88% for 10+ minutes. earlyoom will start killing processes (likely unifi-core, the controller) when available memory drops below ~10%. This is the precursor to a controller crash loop. See runbooks/udm-unifi-core-crash-loop.md. Consider rebooting the UDM via the web UI, or reduce controller workload (disable DPI, unused apps)."
+    "summary": "UDM memory (usg.mem) >85% for 5+ minutes. earlyoom will start killing processes (likely unifi-core, the controller) when available memory drops below ~10%. This is the precursor to a controller crash loop. See runbooks/udm-unifi-core-crash-loop.md. Reduce controller workload (IPS was the 2026-10-15 load driver; DPI is next). Restart via SSH (`systemctl restart unifi-core`) or the web UI. NOTE: usg.mem lags real kernel state — verify via SSH (free -h, earlyoom syslog) before acting."
   }
 }
