@@ -77,9 +77,13 @@ spec:
 #
 # R2 filing tier (2026-10-17): graph client surface pinned to 15 plain tool
 # names (12 reads + create-mail-folder/move-mail-message/delete-mail-message)
-# with tool_sync_interval=15 — Bifrost's discovery snapshot still dates from
-# the --read-only era and never mapped the write verbs; the periodic tick
-# (and each client-config change at boot) refreshes it. Compartments:
+# with tool_sync_interval="300s" — Bifrost's discovery snapshot still dates
+# from the --read-only era and never mapped the write verbs; the periodic tick
+# (and each client-config change at boot) refreshes it. NOTE: the config.json
+# loader parses tool_sync_interval as a GO DURATION (bare number = ns; a bare
+# 15 was rejected with "must be a whole number of seconds, got 15ns"). The
+# management API takes minutes-int; the FILE takes a duration string.
+# Compartments:
 # aios-helpdesk = reads-only VK (12), aios-helpdesk-file = tool-only filing
 # VK (5 verbs, no provider_configs = no model access). All lists are PLAIN
 # tool names; Bifrost strips the graph- prefix before matching.
@@ -136,7 +140,7 @@ data:
               "delete-mail-message"
             ],
             "tools_to_auto_execute": [],
-            "tool_sync_interval": 15
+            "tool_sync_interval": "300s"
           }
         ]
       },
