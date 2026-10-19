@@ -1,0 +1,89 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  annotations: null
+  creationTimestamp: '2026-10-16T15:18:51Z'
+  generation: 23
+  labels:
+    app.kubernetes.io/name: aios-mail-digest
+    app.kubernetes.io/part-of: aios
+  name: aios-mail-digest
+  namespace: ai
+  resourceVersion: '10332454'
+  uid: c1d77a7f-48b4-4e20-b589-92ac41c53aad
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    metadata: {}
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: aios-mail-digest
+        spec:
+          containers:
+          - env:
+            - name: BIFROST_URL
+              value: https://llm.caehomelab.com
+            - name: DIGEST_ISSUE_NUMBER
+              value: '50'
+            - name: GITHUB_INSTALLATION_ID
+              value: '168700840'
+            - name: DIGEST_MODEL
+              value: ollama/muse-glimmer:latest
+            - name: DIGEST_PRIORITY_KEYWORDS
+              value: bluff creek,ccha,crossbar,bearpath,flag football,cc united
+            - name: DIGEST_PROTECTED_DOMAINS
+              value: engelmn.com,alohamn.com,crookedgate.com,warnersstellian.com,warners-stellian.com
+            - name: DIGEST_CONTACT_EXCLUDES
+              value: ui.com
+            - name: DIGEST_SENT_TOP
+              value: '250'
+            - name: DIGEST_ORDERS_FOLDER
+              value: Orders
+            - name: DIGEST_RECEIPTS_FOLDER
+              value: Receipts
+            - name: DIGEST_FILED_FOLDER
+              value: AIOS-Filed
+            - name: DIGEST_FILED_DAYS
+              value: '10'
+            - name: DIGEST_SCAN_TOP
+              value: '200'
+            envFrom:
+            - secretRef:
+                name: aios-mail-digest-secrets
+            image: caehomelab/aios-mail-digest:0.3.4
+            imagePullPolicy: Never
+            name: digest
+            resources:
+              limits:
+                cpu: 250m
+                memory: 256Mi
+              requests:
+                cpu: 25m
+                memory: 64Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsGroup: 65534
+              runAsNonRoot: true
+              runAsUser: 65534
+              seccompProfile:
+                type: RuntimeDefault
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+          dnsPolicy: ClusterFirst
+          nodeSelector:
+            kubernetes.io/arch: amd64
+          restartPolicy: Never
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+      ttlSecondsAfterFinished: 259200
+  schedule: 0 5,12,17 * * *
+  startingDeadlineSeconds: 1800
+  successfulJobsHistoryLimit: 3
+  suspend: false
+  timeZone: America/Chicago
