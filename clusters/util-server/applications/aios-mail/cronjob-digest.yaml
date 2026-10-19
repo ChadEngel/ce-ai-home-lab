@@ -3,13 +3,13 @@ kind: CronJob
 metadata:
   annotations: null
   creationTimestamp: '2026-10-16T15:18:51Z'
-  generation: 23
+  generation: 27
   labels:
     app.kubernetes.io/name: aios-mail-digest
     app.kubernetes.io/part-of: aios
   name: aios-mail-digest
   namespace: ai
-  resourceVersion: '10332454'
+  resourceVersion: '10349397'
   uid: c1d77a7f-48b4-4e20-b589-92ac41c53aad
 spec:
   concurrencyPolicy: Forbid
@@ -32,7 +32,7 @@ spec:
             - name: GITHUB_INSTALLATION_ID
               value: '168700840'
             - name: DIGEST_MODEL
-              value: ollama/muse-glimmer:latest
+              value: ollama/qwen3.8:latest
             - name: DIGEST_PRIORITY_KEYWORDS
               value: bluff creek,ccha,crossbar,bearpath,flag football,cc united
             - name: DIGEST_PROTECTED_DOMAINS
@@ -51,10 +51,12 @@ spec:
               value: '10'
             - name: DIGEST_SCAN_TOP
               value: '200'
+            - name: DIGEST_CHUNK
+              value: '40'
             envFrom:
             - secretRef:
                 name: aios-mail-digest-secrets
-            image: caehomelab/aios-mail-digest:0.3.4
+            image: caehomelab/aios-mail-digest:0.3.5
             imagePullPolicy: Never
             name: digest
             resources:
@@ -87,3 +89,4 @@ spec:
   successfulJobsHistoryLimit: 3
   suspend: false
   timeZone: America/Chicago
+
