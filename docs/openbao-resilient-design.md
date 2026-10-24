@@ -189,12 +189,39 @@ address/token are created out-of-band, exactly like
   dependency class Infisical carries; snapshots are native.
 - **Phased rollout with parallel run** — Infisical keeps serving during the
   evaluation; reversibility at every step (one namespace, then one CR).
+- **AUTO-UNSEAL FROM DAY ONE** (user decision 2026-10-19: manual unseal
+  rejected) — even the Tier 1 trial runs a seal-box + transit topology.
+  The seal box is manually unsealed only after *its own* restart, which the
+  unseal CronJob automates (key in k8s secret — pragmatic homelab
+  tradeoff, documented; real long-term protection is offline break-glass
+  credentials).
+- **Snapshots on the NAS** (user decision 2026-10-19: yes) — via the
+  existing `nfs-client` storage class (NAS `192.168.30.121`), Retain
+  policy, 14-day rotation, quarterly restore drills.
+- **PKI/transit other uses: out of scope** (user decision 2026-10-19).
+
+## Trial deployed (2026-10-19) — results
+
+Deployed to ns `openbao` per this design with the decisions above
+(manifests: `clusters/util-server/applications/openbao/`, README includes
+the gotcha list — raft `cluster_addr` mandatory, `file` storage backend
+removed in OpenBao 2.x, transit mount max TTL 768 h caps the periodic
+autounseal token, token-renewal CronJob is a hard dependency).
+
+| Check | Result |
+|---|---|
+| `bao operator init` on main | **0 unseal keys returned, served unsealed immediately** — transit auto-unseal proven |
+| `kubectl delete pod` (main) | new pod booted **unsealed automatically**, raft seeds intact |
+| Daily raft snapshot | works, lands on NFS PVC (NAS), 24 KB first snapshot |
+| Weekly transit-token renewal | works (`ttl` reset to 768 h); policy needed `auth/token/renew` (update, sudo) |
+| Footprint | 2 pods, ~108 Mi total (vs Infisical's ~1 GB) |
+| Infisical | **untouched, still authoritative for all consumers** |
 
 ## Open questions (gated on the user)
 
-1. Manual unseal acceptable for Tier 1 trial? (default: yes)
-2. Trial seeds: throwaway + `PUSHOVER_*` copies OK? (default: yes)
-3. Tier 2 target: transit seal-box vs stay manual?
-4. Where do snapshots land — same NAS path as `home-network-config/backups/`?
-5. Does OpenBao eventually also want to be the issuer backend (PKI/transit)
-   for things like internal TLS — out of scope for now, flagged for later.
+1. ~~Manual unseal acceptable for Tier 1 trial?~~ **Answered: NO — auto-unseal from day one.**
+2. ~~Trial seeds: throwaway + `PUSHOVER_*` copies OK?~~ **Answered: yes — deployed.**
+3. ~~Tier 2 target: transit seal-box vs stay manual?~~ **Answered: transit seal-box (auto-unseal).**
+4. ~~Snapshot destination — NAS?~~ **Answered: yes — `nfs-client` PVC.**
+5. ~~PKI/transit beyond auto-unseal?~~ **Answered: leave out of scope.**
+6. Phase 2 timing: when to install ESO and start the pushover parallel run?

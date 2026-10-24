@@ -1,0 +1,19 @@
+# OpenBao trial deployment — auto-unseal from day one
+# See docs/openbao-resilient-design.md for the full design.
+#
+# Topology (Phase 1 trial):
+#   seal-box (1 pod, transit root of trust, file storage, manual unseal only
+#             after restart — automated by cronjob)
+#   main     (Raft on nfs PVC, auto-unsealed via transit seal-box)
+#   unseal-seal CronJob (auto-unseals the seal box if sealed — pragmatic
+#             homelab pattern; key lives in a K8s secret, see README)
+#   snapshot CronJob (daily raft snapshot -> nfs PVC -> NAS, 14-day retention)
+#
+# Infisical stays untouched during this trial. Teardown: kubectl delete ns openbao.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - sealbox.yaml
+  - main.yaml
+  - cronjobs.yaml

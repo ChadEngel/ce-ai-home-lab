@@ -1,0 +1,80 @@
+# OpenBao "seal box" — the transit root of trust.
+# Single node, file storage on a small nfs PVC. Its ONLY job is serving
+# transit/encrypt/decrypt for the main instance's auto-unseal. It holds no
+# application secrets and restarts rarely (auto-recovered by the
+# unseal-seal-box CronJob using the key from k8s secret openbao-sealbox-creds).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-seal-config
+  namespace: openbao
+data:
+  seal-config.hcl: |
+    ui = false
+    storage "raft" {
+      path    = "/openbao/data"
+      node_id = "seal-1"
+    }
+    listener "tcp" {
+      address = "[::]:8200"
+      tls_disable = 1   # trial: cluster-internal HTTP only, no ingress
+    }
+    api_addr     = "http://openbao-seal.openbao.svc.cluster.local:8200"
+    cluster_addr = "http://openbao-seal.openbao.svc.cluster.local:8201"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openbao-seal-data
+  namespace: openbao
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: nfs-client   # Retain policy; lives on NAS 192.168.30.121
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openbao-seal
+  namespace: openbao
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: openbao-seal }
+  template:
+    metadata:
+      labels: { app: openbao-seal }
+    spec:
+      containers:
+        - name: openbao
+          image: openbao/openbao:2.7.1   # pinned 2026-10-19
+          args: ["server", "-config=/etc/openbao/seal-config.hcl"]
+          env:
+            - { name: BAO_ADDR,   value: "http://127.0.0.1:8200" }
+            - { name: VAULT_ADDR, value: "http://127.0.0.1:8200" }
+          ports:
+            - { containerPort: 8200, name: http }
+            - { containerPort: 8201, name: raft }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          volumeMounts:
+            - { name: config, mountPath: /etc/openbao, readOnly: true }
+            - { name: data,   mountPath: /openbao/data }
+      volumes:
+        - name: config
+          configMap: { name: openbao-seal-config }
+        - name: data
+          persistentVolumeClaim: { claimName: openbao-seal-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openbao-seal
+  namespace: openbao
+spec:
+  selector: { app: openbao-seal }
+  ports:
+    - { name: http, port: 8200, targetPort: 8200 }

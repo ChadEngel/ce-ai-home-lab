@@ -1,0 +1,149 @@
+# Three CronJobs:
+# 1) unseal-seal-box — if the seal box is sealed (after its pod restart),
+#    unseal it using the key from k8s secret openbao-sealbox-creds. This is a
+#    pragmatic homelab tradeoff documented in the README: the key is cluster-
+#    readable, which shifts real protection to etcd/RBAC access. Offline
+#    (paper) storage of break-glass credentials remains the long-term intent.
+# 2) raft-snapshot — daily snapshot of main into the nfs PVC (NAS), 14-day
+#    retention. Restore drill: see README.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-unseal-seal-box
+  namespace: openbao
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: unseal-if-sealed
+              image: openbao/openbao:2.7.1
+              env:
+                - name: UNSEAL_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: openbao-sealbox-creds
+                      key: UNSEAL_KEY
+                      optional: false
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  if bao status -address=http://openbao-seal.openbao.svc.cluster.local:8200 \
+                       -format=json | grep -q '"sealed"[ :]*true'; then
+                    echo "seal box is sealed - unsealing"
+                    printf '%s' "$UNSEAL_KEY" | \
+                      bao operator unseal -address=http://openbao-seal.openbao.svc.cluster.local:8200
+                  fi
+                  bao status -address=http://openbao-seal.openbao.svc.cluster.local:8200 | tail -n 5
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits:   { cpu: 100m, memory: 64Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-raft-snapshot
+  namespace: openbao
+spec:
+  schedule: "15 2 * * *"   # 02:15 America/Chicago-equivalent local time (cluster runs UTC; 02:15 UTC = evening CST) — kept simple for trial
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: snapshot
+              image: openbao/openbao:2.7.1
+              env:
+                - name: BAO_ADDR
+                  value: "http://openbao-main.openbao.svc.cluster.local:8200"
+                - name: BAO_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: openbao-snapshot-token
+                      key: token
+                      optional: false
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  mkdir -p /backups
+                  bao operator raft snapshot save "/backups/openbao-main-$(date +%Y%m%dT%H%M%S).snap"
+                  find /backups -name 'openbao-main-*.snap' -mtime +14 -delete
+                  ls -la /backups | tail -n 5
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits:   { cpu: 100m, memory: 64Mi }
+              volumeMounts:
+                - { name: snapshots, mountPath: /backups }
+          volumes:
+            - name: snapshots
+              persistentVolumeClaim:
+                claimName: openbao-snapshots
+---
+# 3) renew-transit-token — the autounseal periodic token on the seal box has
+#    a LIVE TTL of 768h regardless of its period horizon (mount max). If it
+#    expires, the MAIN instance keeps running but CANNOT auto-unseal after a
+#    restart. Weekly self-renewal resets the TTL; this job is a hard
+#    dependency of the auto-unseal chain (see README gotcha).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-renew-transit-token
+  namespace: openbao
+spec:
+  schedule: "0 3 * * 1"   # Mondays 03:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: renew-self
+              image: openbao/openbao:2.7.1
+              env:
+                - name: BAO_ADDR
+                  value: "http://openbao-seal.openbao.svc.cluster.local:8200"
+                - name: BAO_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: openbao-transit-token
+                      key: token
+                      optional: false
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  bao write auth/token/renew token="$BAO_TOKEN" increment=700h >/dev/null   # >7d runway
+                  bao token lookup -format=json | grep -E '"ttl"' | head -1
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits:   { cpu: 100m, memory: 64Mi }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openbao-snapshots
+  namespace: openbao
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 1Gi

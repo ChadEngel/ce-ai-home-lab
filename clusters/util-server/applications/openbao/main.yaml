@@ -1,0 +1,104 @@
+# OpenBao main — single-node Raft (nfs PVC), transit auto-unseal via seal box.
+# The transit token is rendered into the config by an init container (sed)
+# from k8s secret openbao-transit-token — the lab pattern used by the Grafana
+# datasource init-container. Tier 2 scales this to 3 replicas + anti-affinity.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-main-config-template
+  namespace: openbao
+data:
+  main-config.hcl.tpl: |
+    ui = true
+    storage "raft" {
+      path    = "/openbao/data"
+      node_id = "main-1"
+    }
+    listener "tcp" {
+      address     = "[::]:8200"
+      tls_disable = 1   # trial: cluster-internal HTTP only, no ingress
+    }
+    api_addr     = "http://openbao-main.openbao.svc.cluster.local:8200"
+    cluster_addr = "http://openbao-main.openbao.svc.cluster.local:8201"
+    seal "transit" {
+      address    = "http://openbao-seal.openbao.svc.cluster.local:8200"
+      token      = "__TRANSIT_TOKEN__"
+      key_name   = "autounseal"
+      mount_path = "transit/"
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openbao-main-data
+  namespace: openbao
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openbao-main
+  namespace: openbao
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: openbao-main }
+  template:
+    metadata:
+      labels: { app: openbao-main }
+    spec:
+      initContainers:
+        - name: render-config
+          image: busybox:1.36
+          env:
+            - name: TRANSIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openbao-transit-token
+                  key: token
+                  optional: false
+          command: ["sh", "-c"]
+          args:
+            - 'sed "s|__TRANSIT_TOKEN__|$TRANSIT_TOKEN|g" /config-template/main-config.hcl.tpl > /etc/openbao/main-config.hcl && chmod 644 /etc/openbao/main-config.hcl'
+          volumeMounts:
+            - { name: config-template, mountPath: /config-template, readOnly: true }
+            - { name: config,          mountPath: /etc/openbao }
+      containers:
+        - name: openbao
+          image: openbao/openbao:2.7.1   # pinned 2026-10-19
+          args: ["server", "-config=/etc/openbao/main-config.hcl"]
+          env:
+            - { name: BAO_ADDR,   value: "http://127.0.0.1:8200" }
+            - { name: VAULT_ADDR, value: "http://127.0.0.1:8200" }
+          ports:
+            - { containerPort: 8200, name: http }
+            - { containerPort: 8201, name: raft }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: "1",  memory: 512Mi }
+          volumeMounts:
+            - { name: config, mountPath: /etc/openbao, readOnly: true }
+            - { name: data,   mountPath: /openbao/data }
+      volumes:
+        - name: config-template
+          configMap: { name: openbao-main-config-template }
+        - name: config
+          emptyDir: { medium: Memory }
+        - name: data
+          persistentVolumeClaim: { claimName: openbao-main-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openbao-main
+  namespace: openbao
+spec:
+  selector: { app: openbao-main }
+  ports:
+    - { name: http, port: 8200, targetPort: 8200 }
+    - { name: raft, port: 8201, targetPort: 8201 }
