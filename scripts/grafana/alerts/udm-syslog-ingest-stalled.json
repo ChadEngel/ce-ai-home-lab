@@ -3,14 +3,14 @@
   "ruleGroup": "udm-syslog",
   "folder": "UDM Alerts",
   "for": "30m",
-  "noDataState": "OK",
-  "execErrState": "OK",
+  "noDataState": "Alerting",
+  "execErrState": "Alerting",
   "condition": "C",
   "labels": {
     "severity": "critical"
   },
   "annotations": {
-    "summary": "No UDM syslog has reached Loki for 30m \u2014 the receiver, the UDM's syslog target, or the network path is broken.",
+    "summary": "UDM syslog has not reached Loki for 30m \u2014 receiver, forwarder, or network path broken, or the ingest-stalled metric itself is missing. Treat NO DATA as failure (the Oct 22-30 outage burned 8 days unnoticed because noDataState was OK). See home-network-config/runbooks/syslog-receiver-problems.md case 2026-10-30.",
     "description": "Fires when the 30m total is < 1. Catches a dead syslog-ng on caelx004 or the UDM dropping the target."
   },
   "data": [
